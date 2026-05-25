@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/google/config → update form/spreadsheet config
 export async function PATCH(req: Request) {
   try {

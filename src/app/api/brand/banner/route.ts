@@ -4,6 +4,8 @@ import path from "path";
 import { saveBrandConfig } from "@/lib/brand";
 import { syncBannerToGoogleForm } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
 

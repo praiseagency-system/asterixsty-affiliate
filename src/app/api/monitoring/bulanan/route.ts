@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getStatusInfo } from "@/lib/format";
 import { getTierBadgeDB, getScoreDB } from "@/lib/tier";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const periode = url.searchParams.get("periode");

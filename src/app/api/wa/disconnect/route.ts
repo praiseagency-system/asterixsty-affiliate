@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { disconnectWA, getWAState } from "@/lib/wa-client";
 
+export const dynamic = "force-dynamic";
+
 export async function POST() {
   try {
     await disconnectWA();

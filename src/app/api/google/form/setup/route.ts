@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createGoogleForm, getOrCreateIntegration } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/google/form/setup → auto-create Google Form via Forms API
 export async function POST(req: Request) {
   try {

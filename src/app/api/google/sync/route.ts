@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { syncFormResponses } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/google/sync → read Forms API responses and update submissions + checklists
 export async function POST(req: Request) {
   try {

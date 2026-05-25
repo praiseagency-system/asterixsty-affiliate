@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { PROVINSI_ID, KOTA_ID } from "@/lib/indonesia";
 import { VISUAL_TAKE } from "@/lib/constants";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/master/suggestions?type=kota|provinsi|kategori|specialist|produk&q=...
 export async function GET(req: Request) {
   const url  = new URL(req.url);

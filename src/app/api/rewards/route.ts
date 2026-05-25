@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/rewards?campaignId=&status=&username=
 export async function GET(req: Request) {
   const url        = new URL(req.url);

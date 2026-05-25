@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/wa-queue?broadcastId=&status=&limit=100
 export async function GET(req: Request) {
   const prisma = getPrisma();

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { getWAState } from "@/lib/wa-client";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/broadcast?status=&limit=50
 export async function GET(req: Request) {
   const prisma = getPrisma();   // always get live client (handles stale singleton in dev)

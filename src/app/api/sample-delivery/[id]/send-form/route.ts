@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { sendSampleDeliveryWA } from "@/lib/send-sample-delivery-wa";
 import { generatePersonalFormLink } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/sample-delivery/[id]/send-form
 // Resend the submission form link via WhatsApp to the affiliate.
 // Always regenerates a fresh personal prefilled link (fixes stale/empty links).

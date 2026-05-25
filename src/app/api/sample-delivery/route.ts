@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { sendSampleDeliveryWA } from "@/lib/send-sample-delivery-wa";
 import { generatePersonalFormLink } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 function calcProgress(ceklis: { done: boolean }[], target: number) {
   const done = ceklis.filter((c) => c.done).length;
   const status =

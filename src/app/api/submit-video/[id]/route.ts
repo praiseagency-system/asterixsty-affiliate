@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getBrandConfig } from "@/lib/brand";
 
+export const dynamic = "force-dynamic";
+
 // ── GET: Fetch form data (delivery info + brand + existing submissions) ───────
 export async function GET(
   _req: Request,

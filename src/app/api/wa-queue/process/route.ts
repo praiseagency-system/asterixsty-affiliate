@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { processWaQueue } from "@/lib/wa-queue-processor";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/wa-queue/process?limit=1
 // Processes up to `limit` pending WA messages.
 // Uses respectDelay=false (client controls timing by calling multiple times).

@@ -3,6 +3,8 @@ import { writeFile } from "fs/promises";
 import path from "path";
 import { saveBrandConfig } from "@/lib/brand";
 
+export const dynamic = "force-dynamic";
+
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 

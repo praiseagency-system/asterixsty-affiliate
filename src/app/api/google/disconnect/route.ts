@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // DELETE /api/google/disconnect → clears stored tokens, keeps credentials
 export async function DELETE(req: Request) {
   const url     = new URL(req.url);

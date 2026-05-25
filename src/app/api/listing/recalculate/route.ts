@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { calcListingScore } from "@/lib/listingScore";
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/listing/recalculate
  * Recalculates scores for all (non-deleted) listing items using current

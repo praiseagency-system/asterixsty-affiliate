@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TEMPLATE_HEADERS, HEADER_MAP } from "../template/route";
 
+export const dynamic = "force-dynamic";
+
 type ImportRow = Record<string, string>;
 
 export interface ImportResult {

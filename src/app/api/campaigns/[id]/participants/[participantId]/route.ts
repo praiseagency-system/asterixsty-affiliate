@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 type Params = { params: Promise<{ id: string; participantId: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {

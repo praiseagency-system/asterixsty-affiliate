@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calcScore } from "@/lib/format";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const { rows } = await req.json() as { rows: Record<string, string>[] };

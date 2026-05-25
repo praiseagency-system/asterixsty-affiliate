@@ -4,6 +4,8 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "agreements");
 const ALLOWED_EXTS = ["pdf", "jpg", "jpeg", "png"];
 

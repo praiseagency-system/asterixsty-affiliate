@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/encryption";
 import { getOrCreateIntegration } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/google/integration → returns integration info (no decrypted secrets)
 export async function GET(req: Request) {
   const url     = new URL(req.url);

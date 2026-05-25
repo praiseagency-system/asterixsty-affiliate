@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTierBadgeDB } from "@/lib/tier";
 
+export const dynamic = "force-dynamic";
+
 function dayRange(d: Date) {
   const start = new Date(d);
   start.setHours(0, 0, 0, 0);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getBrandConfig, saveBrandConfig } from "@/lib/brand";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const cfg = await getBrandConfig();
   return NextResponse.json(cfg);

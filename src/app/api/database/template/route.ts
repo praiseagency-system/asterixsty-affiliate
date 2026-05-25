@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
+export const dynamic = "force-dynamic";
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 export const TEMPLATE_HEADERS = [
   "username",

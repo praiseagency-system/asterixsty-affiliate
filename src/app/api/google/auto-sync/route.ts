@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncFormResponses } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 const SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
 /**

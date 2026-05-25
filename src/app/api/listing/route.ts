@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { calcListingScore } from "@/lib/listingScore";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   const prisma = getPrisma();
   const url = new URL(req.url);

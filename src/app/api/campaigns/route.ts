@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function computeRewardPool(rewardConfigStr: string): number {
   try {

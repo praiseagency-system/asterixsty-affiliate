@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 function calcProgress(ceklis: { done: boolean }[], target: number) {
   const done = ceklis.filter((c) => c.done).length;
   const status =

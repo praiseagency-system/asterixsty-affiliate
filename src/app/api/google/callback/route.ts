@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/google/callback?code=...&state=...
 // Handles Google OAuth redirect. Saves encrypted tokens and redirects to /google-integration.
 export async function GET(req: Request) {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getValidToken, getOrCreateIntegration } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/google/status → full connection state + config
 export async function GET(req: Request) {
   const url     = new URL(req.url);

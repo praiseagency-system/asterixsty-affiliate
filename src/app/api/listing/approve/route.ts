@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/listing/approve  { id, approvalSample }
 export async function PATCH(req: Request) {
   const { id, approvalSample } = await req.json();

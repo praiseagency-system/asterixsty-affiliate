@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { deriveEntryIds } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/google/form/fix-entry-ids
 // Recomputes formEntryIds from stored formQuestionIds (hex → decimal).
 // Use this when a form was created before the hex→decimal derivation was implemented,

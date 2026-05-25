@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { invalidateCache } from "@/lib/tier";
 
+export const dynamic = "force-dynamic";
+
 export interface DeadlineConfig {
   durasiPengiriman: number;   // default 5
   durasiVideo1: number;       // default 3

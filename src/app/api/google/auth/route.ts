@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOAuthUrl, isConfigured } from "@/lib/google-auth";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/google/auth → returns { url } to redirect browser to for OAuth
 export async function GET(req: Request) {
   const url     = new URL(req.url);

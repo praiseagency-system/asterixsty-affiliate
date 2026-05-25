@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/broadcast/recipients?groups=VIP,Worth+It&categories=Skincare&visualTakes=Inframe&manualIds=1,2,3&type=All
 export async function GET(req: Request) {
   const prisma = getPrisma();
