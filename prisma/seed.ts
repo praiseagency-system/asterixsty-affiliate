@@ -77,25 +77,28 @@ async function main() {
 
   await prisma.tierConfig.createMany({
     data: [
-      { tier: "A", label: "Elite", minGmv: 10_000_000, color: "gold" },
-      { tier: "B", label: "Growth", minGmv: 5_000_000, color: "silver" },
-      { tier: "C", label: "Entry", minGmv: 0, color: "bronze" },
+      { tier: "A", label: "Elite",  minGmv: 10_000_000, color: "gold"   },
+      { tier: "B", label: "Growth", minGmv:  5_000_000, color: "silver" },
+      { tier: "C", label: "Entry",  minGmv:     50_000, color: "bronze" },
     ],
   });
 
   await prisma.scoreConfig.createMany({
     data: [
-      { komponen: "gmv", level: 3, minValue: 1_000_000, label: "≥ Rp1 Jt" },
-      { komponen: "gmv", level: 2, minValue: 300_000, label: "≥ Rp300 rb" },
-      { komponen: "gmv", level: 1, minValue: 50_000, label: "≥ Rp50 rb" },
-      { komponen: "gmv", level: 0, minValue: 0, label: "< Rp50 rb" },
+      // GMV Kriteria — thresholds ascending; point = level
+      { komponen: "gmv", level: 1, minValue:  5_000_000, label: "≥ Rp 5 Jt"  },
+      { komponen: "gmv", level: 2, minValue: 10_000_000, label: "≥ Rp 10 Jt" },
+      { komponen: "gmv", level: 3, minValue: 11_000_000, label: "≥ Rp 11 Jt" },
+      { komponen: "gmv", level: 0, minValue:          0, label: "< Rp 5 Jt"  },
+      // Qty Kriteria
       { komponen: "qty", level: 3, minValue: 100, label: "≥ 100 pcs" },
-      { komponen: "qty", level: 2, minValue: 50, label: "≥ 50 pcs" },
-      { komponen: "qty", level: 1, minValue: 1, label: "≥ 1 pcs" },
-      { komponen: "qty", level: 0, minValue: 0, label: "0 pcs" },
-      { komponen: "views", level: 3, minValue: 5_000, label: "≥ 5 rb views" },
-      { komponen: "views", level: 2, minValue: 1_000, label: "≥ 1 rb views" },
-      { komponen: "views", level: 1, minValue: 0, label: "< 1 rb views" },
+      { komponen: "qty", level: 2, minValue:  50, label: "≥ 50 pcs"  },
+      { komponen: "qty", level: 1, minValue:   1, label: "≥ 1 pcs"   },
+      { komponen: "qty", level: 0, minValue:   0, label: "0 pcs"     },
+      // Views
+      { komponen: "views", level: 2, minValue: 5_000, label: "≥ 5 rb views" },
+      { komponen: "views", level: 1, minValue: 1_000, label: "≥ 1 rb views" },
+      { komponen: "views", level: 0, minValue:     0, label: "< 1 rb views" },
     ],
   });
 
