@@ -1149,17 +1149,19 @@ export default function CampaignsPage() {
     }
   }, []);
 
-  // Fetch master data (specialists + categories) — resilient, never blocks campaigns loading
-  useEffect(() => {
+  // Fetch master data (specialists + categories) — re-fetch every time modal opens
+  const fetchMaster = () => {
     fetch("/api/master")
       .then(async (r) => {
         const d = await r.json() as { specialists?: Specialist[]; categories?: Category[] };
-        console.log("[campaigns] master specialists:", d.specialists?.length, "categories:", d.categories?.length);
         setSpecialists(d.specialists ?? []);
         setCategories(d.categories  ?? []);
       })
       .catch((err) => console.error("[campaigns] master fetch failed:", err));
-  }, []);
+  };
+
+  useEffect(() => { fetchMaster(); }, []);
+  useEffect(() => { if (showCreate) fetchMaster(); }, [showCreate]);
 
   const fetchCampaigns = useCallback(async () => {
     try {
