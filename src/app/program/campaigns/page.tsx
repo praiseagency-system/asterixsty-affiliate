@@ -735,9 +735,10 @@ const EMPTY_REWARD: RewardConfig = {
   milestones:  [],
 };
 
-function CreateModal({ specialists, categories, onClose, onCreated }: {
+function CreateModal({ specialists, categories, products, onClose, onCreated }: {
   specialists: Specialist[];
   categories:  Category[];
+  products:    Product[];
   onClose: () => void;
   onCreated: (id: number) => void;
 }) {
@@ -745,18 +746,11 @@ function CreateModal({ specialists, categories, onClose, onCreated }: {
   const [rewardConfig, setReward]   = useState<RewardConfig>(EMPTY_REWARD);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState("");
-  const [products, setProducts]     = useState<Product[]>([]);
   // Banner
   const [bannerFile, setBannerFile]       = useState<File|null>(null);
   const [bannerPreview, setBannerPreview] = useState<string>("");
   const [bannerDrag, setBannerDrag]       = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch("/api/products")
-      .then(async (r) => { const d = await r.json() as Product[]; setProducts(Array.isArray(d) ? d : []); })
-      .catch(() => { /* silent */ });
-  }, []);
 
   function set<K extends keyof CreateForm>(k: K, v: CreateForm[K]) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -1135,6 +1129,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns]     = useState<Campaign[]>([]);
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [categories, setCategories]   = useState<Category[]>([]);
+  const [products, setProducts]       = useState<Product[]>([]);
   const [loading, setLoading]         = useState(true);
   const [activeTab, setActiveTab]     = useState<FilterTab>("All");
   const [search, setSearch]           = useState("");
@@ -1149,13 +1144,14 @@ export default function CampaignsPage() {
     }
   }, []);
 
-  // Fetch master data (specialists + categories) — re-fetch every time modal opens
+  // Fetch master data (specialists + categories + products) — re-fetch every time modal opens
   const fetchMaster = () => {
     fetch("/api/master")
       .then(async (r) => {
-        const d = await r.json() as { specialists?: Specialist[]; categories?: Category[] };
+        const d = await r.json() as { specialists?: Specialist[]; categories?: Category[]; products?: Product[] };
         setSpecialists(d.specialists ?? []);
         setCategories(d.categories  ?? []);
+        setProducts(d.products      ?? []);
       })
       .catch((err) => console.error("[campaigns] master fetch failed:", err));
   };
@@ -1296,6 +1292,7 @@ export default function CampaignsPage() {
         <CreateModal
           specialists={specialists}
           categories={categories}
+          products={products}
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
         />
