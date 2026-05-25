@@ -6,6 +6,7 @@
 import { getPrisma } from "@/lib/prisma";
 import { getValidToken, deriveEntryIds } from "@/lib/google-auth";
 import { VISUAL_TAKE } from "@/lib/constants";
+import { getBrandConfig } from "@/lib/brand";
 
 const FORMS_URL = "https://forms.googleapis.com/v1/forms";
 
@@ -228,7 +229,9 @@ function titleToKey(title: string): string {
 /**
  * Creates a Google Form for campaign registration.
  * 6 questions: Nama, Username TikTok, No WA, Alamat, Kategori, Visual Take
- * Optionally sets campaign banner as form header image.
+ * Banner (if available) is placed as the first item in the form body — the Google
+ * Forms API v1 does not expose the cover/header image field, so imageItem at
+ * index 0 is the highest position achievable via the public API.
  */
 export async function createCampaignRegistrationForm(opts: {
   campaignId:   number;
@@ -239,6 +242,10 @@ export async function createCampaignRegistrationForm(opts: {
   const prisma = getPrisma();
   const token  = await getValidToken();
   if (!token) throw new Error("Google belum terhubung. Hubungkan Google di halaman Pengaturan.");
+
+  // Dynamic brand name from Brand Settings
+  const brand     = await getBrandConfig();
+  const brandName = brand.brandName || "Praise";
 
   const questions: QuestionDef[] = [
     {
@@ -283,7 +290,7 @@ export async function createCampaignRegistrationForm(opts: {
   const { formId, publicId, questionIds, entryIds } = await buildForm(
     token,
     `${opts.campaignName} — Form Pendaftaran Affiliate`,
-    `Daftarkan diri kamu sebagai affiliate untuk campaign "${opts.campaignName}" dari Asterixsty Perfumery. Isi semua data dengan lengkap dan benar.`,
+    `Daftarkan diri kamu sebagai affiliate untuk campaign "${opts.campaignName}" dari ${brandName}. Isi semua data dengan lengkap dan benar.`,
     questions,
     bannerUrl,
   );
@@ -313,9 +320,12 @@ export async function createCampaignRegistrationForm(opts: {
 // ── Submission Form ───────────────────────────────────────────────────────────
 /**
  * Creates a Google Form for campaign video submissions.
- * 6 questions: Participant ID, Username TikTok, Product Focus (CHECKBOX),
- *              Jumlah Pengumpulan Video (DROPDOWN 1-50), Link Video TikTok, Spark Code
- * Optionally sets campaign banner as form header image.
+ * 6 questions:
+ *   Participant ID, Username TikTok,
+ *   Produk yang Dipromosikan (CHECKBOX — multi-select, creator may promote multiple),
+ *   Pengumpulan Video Ke- (DROPDOWN single-select, "Video 1"–"Video 50"),
+ *   Link Video TikTok, Spark Code
+ * Banner (if available) is placed as the first item — see registration form comment.
  */
 export async function createCampaignSubmissionForm(opts: {
   campaignId:   number;
@@ -327,12 +337,16 @@ export async function createCampaignSubmissionForm(opts: {
   const token  = await getValidToken();
   if (!token) throw new Error("Google belum terhubung. Hubungkan Google di halaman Pengaturan.");
 
+  // Dynamic brand name from Brand Settings
+  const brand     = await getBrandConfig();
+  const brandName = brand.brandName || "Praise";
+
   const productOptions = opts.productNames.length > 0
     ? opts.productNames
     : ["(Tidak ada produk terdaftar)"];
 
-  // Dropdown options 1-50
-  const videoCountOptions = Array.from({ length: 50 }, (_, i) => String(i + 1));
+  // Dropdown options "Video 1" – "Video 50" (single-select)
+  const videoCountOptions = Array.from({ length: 50 }, (_, i) => `Video ${i + 1}`);
 
   const questions: QuestionDef[] = [
     {
@@ -348,29 +362,32 @@ export async function createCampaignSubmissionForm(opts: {
       description: "Tanpa simbol @",
     },
     {
-      title:    "Product Focus",
-      type:     "CHECKBOX",
-      required: true,
-      options:  productOptions,
+      // Multi-select CHECKBOX — creator may promote multiple products in one video
+      title:       "Produk yang Dipromosikan",
+      type:        "CHECKBOX",
+      required:    true,
+      description: "Pilih semua produk yang kamu promosikan dalam video ini",
+      options:     productOptions,
     },
     {
-      title:       "Jumlah Pengumpulan Video",
+      // Single-select DROPDOWN — which video number is this submission?
+      title:       "Pengumpulan Video Ke-",
       type:        "DROPDOWN",
       required:    true,
-      description: "Berapa video yang kamu kumpulkan pada pengumpulan ini?",
+      description: "Pilih nomor urut video yang sedang kamu kumpulkan (contoh: jika ini video ketigamu, pilih Video 3)",
       options:     videoCountOptions,
     },
     {
       title:       "Link Video TikTok",
       type:        "PARAGRAPH",
       required:    true,
-      description: "Tuliskan link setiap video (satu link per baris)",
+      description: "Tuliskan link video TikTok kamu",
     },
     {
       title:       "Spark Code",
       type:        "PARAGRAPH",
       required:    false,
-      description: "Spark code untuk setiap video (opsional, satu per baris jika ada)",
+      description: "Spark code untuk video ini (opsional)",
     },
   ];
 
@@ -379,7 +396,7 @@ export async function createCampaignSubmissionForm(opts: {
   const { formId, publicId, questionIds, entryIds } = await buildForm(
     token,
     `${opts.campaignName} — Form Pengumpulan Video`,
-    `Kumpulkan video TikTok kamu untuk campaign "${opts.campaignName}". Isi data dengan lengkap untuk setiap pengumpulan video.`,
+    `Kumpulkan video TikTok kamu untuk campaign "${opts.campaignName}" dari ${brandName}. Isi data dengan lengkap untuk setiap video yang kamu upload.`,
     questions,
     bannerUrl,
   );
@@ -686,8 +703,10 @@ export async function syncCampaignSubmissions(campaignId: number): Promise<{
       try {
         const answers        = response.answers || {};
         const usernameTiktok = getAnswer(answers, "usernameTiktok");
-        const jumlahStr      = getAnswer(answers, "jumlahPengumpulanVideo");
-        const jumlah         = parseInt(jumlahStr, 10) || 0;
+        // Support both new key ("pengumpulanVideoKe") and old key ("jumlahPengumpulanVideo")
+        // New format answers like "Video 3" → parse number from string
+        const jumlahStr = getAnswer(answers, "pengumpulanVideoKe") || getAnswer(answers, "jumlahPengumpulanVideo");
+        const jumlah    = parseInt(jumlahStr.replace(/[^0-9]/g, ""), 10) || 0;
 
         if (!usernameTiktok || jumlah <= 0) {
           skipped++;
