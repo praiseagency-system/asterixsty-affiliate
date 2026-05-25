@@ -25,17 +25,23 @@ export async function POST(req: Request) {
 
   if (type === "product") {
     const count = await prisma.product.count();
-    const item = await prisma.product.create({ data: { no: count + 1, ...data } });
+    const item = await prisma.product.create({
+      data: { no: count + 1, nama: String(data.nama ?? ""), hpp: Number(data.hpp ?? 0) },
+    });
     return NextResponse.json(item, { status: 201 });
   }
   if (type === "specialist") {
     const count = await prisma.affiliateSpecialist.count({ where: { deletedAt: null } });
-    const item  = await prisma.affiliateSpecialist.create({ data: { no: count + 1, ...data } });
+    const item  = await prisma.affiliateSpecialist.create({
+      data: { no: count + 1, nama: String(data.nama ?? "") },
+    });
     return NextResponse.json(item, { status: 201 });
   }
   if (type === "category") {
     const count = await prisma.kategoriAffiliate.count();
-    const item  = await prisma.kategoriAffiliate.create({ data: { no: count + 1, ...data } });
+    const item  = await prisma.kategoriAffiliate.create({
+      data: { no: count + 1, nama: String(data.nama ?? ""), deskripsi: String(data.deskripsi ?? "") },
+    });
     return NextResponse.json(item, { status: 201 });
   }
 
