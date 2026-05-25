@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import {
-
-export const dynamic = "force-dynamic";
   createCampaignRegistrationForm,
   createCampaignSubmissionForm,
   syncCampaignRegistrations,
   syncCampaignSubmissions,
 } from "@/lib/google-forms-campaign";
+
+export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CAMPAIGN_OBJECTIVES, OBJECTIVE_META, VISUAL_TAKE } from "@/lib/constants";
+import { useMasterData } from "@/lib/useMasterData";
+import type { Specialist, Category, Product } from "@/lib/useMasterData";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; bg: string; text: string; dot: string }> = {
@@ -21,9 +23,7 @@ const VISIBILITY_META: Record<string, { icon: string }> = {
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface Specialist { id: number; nama: string; }
-interface Category   { id: number; nama: string; deskripsi: string; }
-interface Product    { id: number; nama: string; }
+// Specialist / Category / Product are imported from @/lib/useMasterData
 
 interface LeaderboardRule { id: string; rank: number; ruleType: string; label: string; reward: number; }
 interface Milestone       { id: string; type: "gmv"|"views"|"upload"; target: number; reward: number; }
@@ -160,10 +160,11 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
 }
 
 // ─── Searchable PIC Dropdown ──────────────────────────────────────────────────
-function PicDropdown({ specialists, value, onChange }: {
+function PicDropdown({ specialists, value, onChange, loading = false }: {
   specialists: Specialist[];
   value: number|null;
   onChange: (id: number|null) => void;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ]       = useState("");
@@ -188,7 +189,7 @@ function PicDropdown({ specialists, value, onChange }: {
         className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-gray-200 text-sm hover:border-indigo-300 transition-colors text-left"
       >
         <span className={selected ? "text-gray-800 font-medium" : "text-gray-400"}>
-          {selected ? `👤 ${selected.nama}` : "Pilih PIC..."}
+          {loading ? "Memuat data..." : selected ? `👤 ${selected.nama}` : "Pilih PIC..."}
         </span>
         <span className="text-gray-300 text-xs shrink-0">▾</span>
       </button>
@@ -205,31 +206,40 @@ function PicDropdown({ specialists, value, onChange }: {
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => { onChange(null); setOpen(false); }}
-              className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
-                value === null ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              <span className="text-gray-300 italic">— Tidak ada PIC —</span>
-            </button>
-            {filtered.length === 0 && (
-              <p className="px-4 py-3 text-xs text-gray-400 text-center">Tidak ditemukan</p>
+            {loading ? (
+              <p className="px-4 py-3 text-sm text-gray-400 text-center">Memuat data...</p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { onChange(null); setOpen(false); }}
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                    value === null ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="text-gray-300 italic">— Tidak ada PIC —</span>
+                </button>
+                {filtered.length === 0 && q && (
+                  <p className="px-4 py-3 text-xs text-gray-400 text-center">Tidak ditemukan</p>
+                )}
+                {filtered.length === 0 && !q && specialists.length === 0 && (
+                  <p className="px-4 py-3 text-xs text-gray-400 text-center">Belum ada specialist</p>
+                )}
+                {filtered.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => { onChange(s.id); setOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                      value === s.id ? "bg-indigo-50 text-indigo-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    👤 {s.nama}
+                    {value === s.id && <span className="ml-auto text-indigo-500 text-xs">✓</span>}
+                  </button>
+                ))}
+              </>
             )}
-            {filtered.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => { onChange(s.id); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
-                  value === s.id ? "bg-indigo-50 text-indigo-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                👤 {s.nama}
-                {value === s.id && <span className="ml-auto text-indigo-500 text-xs">✓</span>}
-              </button>
-            ))}
           </div>
         </div>
       )}
@@ -238,12 +248,13 @@ function PicDropdown({ specialists, value, onChange }: {
 }
 
 // ─── MultiSelect ──────────────────────────────────────────────────────────────
-function MultiSelect({ options, value, onChange, placeholder, metaFn }: {
+function MultiSelect({ options, value, onChange, placeholder, metaFn, loading = false }: {
   options: readonly string[];
   value: string[];
   onChange: (v: string[]) => void;
   placeholder: string;
   metaFn?: (opt: string) => { bg: string; text: string; icon?: string };
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -267,7 +278,9 @@ function MultiSelect({ options, value, onChange, placeholder, metaFn }: {
         onClick={() => setOpen(!open)}
         className="min-h-[42px] px-3 py-2 rounded-xl border border-gray-200 cursor-pointer flex flex-wrap gap-1.5 items-center hover:border-indigo-300 transition-colors"
       >
-        {value.length === 0 ? (
+        {loading ? (
+          <span className="text-gray-400 text-sm">Memuat data...</span>
+        ) : value.length === 0 ? (
           <span className="text-gray-400 text-sm">{placeholder}</span>
         ) : (
           value.map((v) => {
@@ -285,7 +298,11 @@ function MultiSelect({ options, value, onChange, placeholder, metaFn }: {
       </div>
       {open && (
         <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-56 overflow-y-auto">
-          {options.map((opt) => {
+          {loading ? (
+            <p className="px-4 py-3 text-sm text-gray-400 text-center">Memuat data...</p>
+          ) : options.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-gray-400 text-center">Data tidak tersedia</p>
+          ) : options.map((opt) => {
             const checked = value.includes(opt);
             const meta = OBJECTIVE_META[opt] ?? { icon: undefined };
             return (
@@ -308,10 +325,11 @@ function MultiSelect({ options, value, onChange, placeholder, metaFn }: {
 }
 
 // ─── Product Multi Select ─────────────────────────────────────────────────────
-function ProductMultiSelect({ products, value, onChange }: {
+function ProductMultiSelect({ products, value, onChange, loading = false }: {
   products: Product[];
   value: number[];
   onChange: (ids: number[]) => void;
+  loading?: boolean;
 }) {
   const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState("");
@@ -339,7 +357,9 @@ function ProductMultiSelect({ products, value, onChange }: {
         onClick={() => setOpen(!open)}
         className="min-h-[42px] px-3 py-2 rounded-xl border border-gray-200 cursor-pointer flex flex-wrap gap-1.5 items-center hover:border-teal-400 transition-colors"
       >
-        {selected.length === 0 ? (
+        {loading ? (
+          <span className="text-gray-400 text-sm">Memuat data...</span>
+        ) : selected.length === 0 ? (
           <span className="text-gray-400 text-sm">Pilih produk...</span>
         ) : (
           <>
@@ -371,8 +391,12 @@ function ProductMultiSelect({ products, value, onChange }: {
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-400">Produk tidak ditemukan</p>
+            {loading ? (
+              <p className="px-4 py-3 text-sm text-gray-400 text-center">Memuat data...</p>
+            ) : filtered.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-400">
+                {query ? "Produk tidak ditemukan" : products.length === 0 ? "Belum ada produk di Data Master" : "Produk tidak ditemukan"}
+              </p>
             ) : filtered.map((p) => {
               const checked = value.includes(p.id);
               return (
@@ -735,10 +759,11 @@ const EMPTY_REWARD: RewardConfig = {
   milestones:  [],
 };
 
-function CreateModal({ specialists, categories, products, onClose, onCreated }: {
-  specialists: Specialist[];
-  categories:  Category[];
-  products:    Product[];
+function CreateModal({ specialists, categories, products, masterLoading, onClose, onCreated }: {
+  specialists:   Specialist[];
+  categories:    Category[];
+  products:      Product[];
+  masterLoading: boolean;
   onClose: () => void;
   onCreated: (id: number) => void;
 }) {
@@ -954,6 +979,7 @@ function CreateModal({ specialists, categories, products, onClose, onCreated }: 
                     specialists={specialists}
                     value={form.picSpecialistId}
                     onChange={(id) => set("picSpecialistId", id)}
+                    loading={masterLoading}
                   />
                 </div>
               </div>
@@ -1006,6 +1032,7 @@ function CreateModal({ specialists, categories, products, onClose, onCreated }: 
                   value={form.affiliateCategories}
                   onChange={(v) => set("affiliateCategories", v)}
                   placeholder="Pilih kategori affiliator"
+                  loading={masterLoading}
                 />
               </div>
 
@@ -1036,6 +1063,7 @@ function CreateModal({ specialists, categories, products, onClose, onCreated }: 
                   products={products}
                   value={form.productFocusIds}
                   onChange={(ids) => set("productFocusIds", ids)}
+                  loading={masterLoading}
                 />
                 <p className="text-[10px] text-gray-400 mt-1">
                   Produk yang menjadi fokus campaign — untuk filter affiliate, analytics GMV, dan leaderboard produk
@@ -1126,15 +1154,31 @@ function CreateModal({ specialists, categories, products, onClose, onCreated }: 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CampaignsPage() {
   const router = useRouter();
-  const [campaigns, setCampaigns]     = useState<Campaign[]>([]);
-  const [specialists, setSpecialists] = useState<Specialist[]>([]);
-  const [categories, setCategories]   = useState<Category[]>([]);
-  const [products, setProducts]       = useState<Product[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [activeTab, setActiveTab]     = useState<FilterTab>("All");
-  const [search, setSearch]           = useState("");
-  const [showCreate, setShowCreate]   = useState(false);
-  const [toast, setToast]             = useState<{ msg: string; type: "ok"|"err" }|null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [activeTab, setActiveTab] = useState<FilterTab>("All");
+  const [search, setSearch]       = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [toast, setToast]           = useState<{ msg: string; type: "ok"|"err" }|null>(null);
+
+  // ── Centralized master data (module-level cache, survives modal open/close) ──
+  const {
+    specialists,
+    categories,
+    products,
+    loading: masterLoading,
+    refresh: refreshMaster,
+  } = useMasterData();
+
+  // Force a fresh master fetch every time the create modal opens
+  // (catches any Data Master edits done since page load)
+  useEffect(() => {
+    if (showCreate) {
+      console.log("[CampaignsPage] modal opened — refreshing master data");
+      refreshMaster();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreate]);
 
   // Read initial tab from URL
   useEffect(() => {
@@ -1143,21 +1187,6 @@ export default function CampaignsPage() {
       if (t && TABS.includes(t)) setActiveTab(t);
     }
   }, []);
-
-  // Fetch master data (specialists + categories + products) — re-fetch every time modal opens
-  const fetchMaster = () => {
-    fetch("/api/master")
-      .then(async (r) => {
-        const d = await r.json() as { specialists?: Specialist[]; categories?: Category[]; products?: Product[] };
-        setSpecialists(d.specialists ?? []);
-        setCategories(d.categories  ?? []);
-        setProducts(d.products      ?? []);
-      })
-      .catch((err) => console.error("[campaigns] master fetch failed:", err));
-  };
-
-  useEffect(() => { fetchMaster(); }, []);
-  useEffect(() => { if (showCreate) fetchMaster(); }, [showCreate]);
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -1293,6 +1322,7 @@ export default function CampaignsPage() {
           specialists={specialists}
           categories={categories}
           products={products}
+          masterLoading={masterLoading}
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
         />

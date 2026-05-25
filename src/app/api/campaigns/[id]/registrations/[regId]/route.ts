@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-
-export const dynamic = "force-dynamic";
   approveCampaignRegistration,
   rejectCampaignRegistration,
 } from "@/lib/google-forms-campaign";
+
+export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string; regId: string }> };
 
