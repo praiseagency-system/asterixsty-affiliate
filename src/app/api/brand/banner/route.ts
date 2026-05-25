@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { saveBrandConfig } from "@/lib/brand";
+import { syncBannerToGoogleForm } from "@/lib/google-auth";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
 
   const bannerPath = `/uploads/${filename}`;
   await saveBrandConfig({ bannerPath });
+
+  // Auto-sync banner to Google Form header (fire-and-forget — don't block upload response)
+  syncBannerToGoogleForm("default").catch(() => { /* non-critical */ });
 
   return NextResponse.json({ ok: true, bannerPath });
 }

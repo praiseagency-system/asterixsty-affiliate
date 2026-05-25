@@ -489,6 +489,102 @@ export async function createGoogleForm(
   return { formId, publicId, entryIds, questionIds };
 }
 
+// ── Sync banner image to existing Google Form header ─────────────────────────
+/**
+ * Pushes the current brand banner to the global submission form as an imageItem
+ * at position 0. If a banner imageItem already exists at index 0, it is replaced.
+ * Safe to call at any time — no-ops if form or banner is not configured.
+ */
+export async function syncBannerToGoogleForm(brandId = "default"): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const token = await getValidToken(brandId);
+  if (!token) return { ok: false, error: "Not authenticated with Google" };
+
+  const g = await prisma.googleIntegration.findUnique({ where: { brandId } });
+  if (!g?.googleFormId) return { ok: false, error: "Google Form not configured" };
+
+  // Get banner path from AppConfig
+  const bannerCfg = await prisma.appConfig.findUnique({ where: { key: "bannerPath" } });
+  const bannerPath = bannerCfg?.value || "";
+  if (!bannerPath) return { ok: false, error: "No banner configured" };
+
+  // Build fully-qualified public URL — Google's servers must be able to reach it
+  let bannerUrl: string;
+  if (bannerPath.startsWith("http://") || bannerPath.startsWith("https://")) {
+    bannerUrl = bannerPath;
+  } else {
+    const origin = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").replace(/\/$/, "");
+    if (!origin) return { ok: false, error: "NEXT_PUBLIC_APP_URL not configured" };
+    bannerUrl = `${origin}${bannerPath}`;
+  }
+
+  // Reject localhost — Google's servers can't reach it
+  try {
+    const { hostname } = new URL(bannerUrl);
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".local")
+    ) {
+      return { ok: false, error: "Banner URL is not publicly accessible (localhost)" };
+    }
+  } catch {
+    return { ok: false, error: "Invalid banner URL" };
+  }
+
+  // Fetch current form structure to check for existing imageItem at index 0
+  const formRes = await fetch(`${FORMS_URL}/${g.googleFormId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!formRes.ok) return { ok: false, error: "Failed to fetch Google Form" };
+
+  const formData = await formRes.json() as {
+    items?: Array<{ itemId?: string; imageItem?: unknown }>;
+  };
+
+  const requests: unknown[] = [];
+
+  // If first item is already an imageItem, delete it before inserting the new one
+  if (formData.items?.[0]?.imageItem !== undefined) {
+    requests.push({ deleteItem: { location: { index: 0 } } });
+  }
+
+  // Insert new banner imageItem at index 0
+  requests.push({
+    createItem: {
+      item: {
+        title: "",
+        imageItem: {
+          image: {
+            sourceUri: bannerUrl,
+            altText: "Banner",
+          },
+        },
+      },
+      location: { index: 0 },
+    },
+  });
+
+  const batchRes = await fetch(`${FORMS_URL}/${g.googleFormId}:batchUpdate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!batchRes.ok) {
+    const err = await batchRes.json() as { error?: { message?: string } };
+    return { ok: false, error: err.error?.message || "Failed to update Google Form" };
+  }
+
+  return { ok: true };
+}
+
 // ── Sync form responses via Forms API ────────────────────────────────────────
 export async function syncFormResponses(brandId = "default"): Promise<{
   synced: number;
