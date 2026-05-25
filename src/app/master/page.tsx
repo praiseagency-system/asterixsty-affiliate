@@ -265,21 +265,26 @@ export default function MasterPage() {
   async function handleAdd(type: string) {
     if (!form.nama?.trim()) return;
     setAdding(true);
-    const payload = { nama: form.nama.trim(), hpp: Number(form.hpp || 0), deskripsi: form.deskripsi || "" };
-    const res = await fetch("/api/master", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, data: payload }),
-    });
-    if (res.ok) {
-      setForm({});
-      toast("Berhasil ditambahkan");
-      await fetchData();
-    } else {
-      const json = await res.json();
-      toast(json.error || "Gagal menambahkan", "error");
+    try {
+      const payload = { nama: form.nama.trim(), hpp: Number(form.hpp || 0), deskripsi: form.deskripsi || "" };
+      const res = await fetch("/api/master", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, data: payload }),
+      });
+      if (res.ok) {
+        setForm({});
+        toast("Berhasil ditambahkan");
+        await fetchData();
+      } else {
+        const json = await res.json();
+        toast(json.error || "Gagal menambahkan", "error");
+      }
+    } catch {
+      toast("Gagal terhubung ke server", "error");
+    } finally {
+      setAdding(false);
     }
-    setAdding(false);
   }
 
   // ── Edit ──────────────────────────────────────────────────────────────────
