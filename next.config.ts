@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "200mb" },
   },
   serverExternalPackages: ["@whiskeysockets/baileys", "pino", "pino-pretty", "node-cron"],
+  async rewrites() {
+    return [
+      {
+        source: "/uploads/:path*",
+        destination: "/api/uploads/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
