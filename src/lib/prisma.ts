@@ -27,6 +27,7 @@ const REQUIRED_MODELS = [
   "campaignProductFocus",
   "campaignForm",
   "campaignRegistration",
+  "whatsappSession",
 ] as const;
 
 /**

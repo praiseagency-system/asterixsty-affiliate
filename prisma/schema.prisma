@@ -124,11 +124,13 @@ model RecruitmentBroadcast {
   totalSent    Int       @default(0)
   totalFailed  Int       @default(0)
   status       String    @default("draft")
-  scheduledAt  DateTime?
-  sentAt       DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  queueItems   WaMessageQueue[]
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  senderMode       String    @default("Single")
+  senderSessionIds String    @default("[]")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  queueItems       WaMessageQueue[]
 }
 
 model WaMessageQueue {
@@ -146,10 +148,12 @@ model WaMessageQueue {
   attempts       Int       @default(0)
   maxAttempts    Int       @default(3)
   errorReason    String    @default("")
-  sentAt         DateTime?
-  scheduledAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  sentAt          DateTime?
+  scheduledAt     DateTime?
+  senderSessionId Int?
+  senderPhone     String    @default("")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model DataMingguan {
@@ -537,4 +541,22 @@ model BroadcastLog {
   createdAt   DateTime  @default(now())
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappSession {
+  id           Int       @id @default(autoincrement())
+  name         String    @default("")
+  phone        String    @default("")
+  status       String    @default("DISCONNECTED") // CONNECTED|DISCONNECTED|CONNECTING|QR_READY|RECONNECTING|LIMITED|WARMUP|BANNED
+  isActive     Boolean   @default(true)
+  isDefault    Boolean   @default(false)
+  dailyLimit   Int       @default(200)
+  sentToday    Int       @default(0)
+  lastSentDate String    @default("")
+  lastUsedAt   DateTime?
+  healthScore  Float     @default(100)
+  failCount    Int       @default(0)
+  successCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }

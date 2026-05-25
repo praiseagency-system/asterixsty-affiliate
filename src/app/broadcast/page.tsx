@@ -19,7 +19,19 @@ interface BroadcastJob {
   status: string; scheduledAt: string | null; sentAt: string | null; createdAt: string;
 }
 interface Preset { id: number; name: string; targetJson: string; }
-interface CampaignSource { id: number; nama: string; joinSlug?: string; status?: string; }
+interface CampaignSource {
+  id:               number;
+  nama:             string;
+  joinSlug?:        string;
+  status?:          string;
+  startDate?:       string | null;
+  endDate?:         string | null;
+  rewardConfig?:    string;
+  rewardDeskripsi?: string;
+  picSpecialist?:   { id: number; nama: string } | null;
+}
+type RewardDisplayMode = "Auto Summary" | "Prize Pool" | "Detail Reward" | "Custom Text" | "Hide Reward";
+type DurationFormat    = "Date Range" | "Total Days";
 interface WaQueueItem {
   id: number; broadcastId: number | null; phone: string; message: string;
   recipientName: string; tiktokUsername: string; campaignId: number | null;
@@ -27,6 +39,24 @@ interface WaQueueItem {
   errorReason: string; sentAt: string | null; createdAt: string;
 }
 interface QueueSummary { pending: number; processing: number; success: number; failed: number; retry: number; }
+interface AutoLogEntry {
+  ts:      string;
+  name:    string;
+  phone:   string;
+  status:  "success" | "failed" | "retry";
+  waitSec: number;
+}
+interface ProcessResult {
+  processed:    number;
+  success:      number;
+  failed:       number;
+  remaining:    number;
+  waConnected:  boolean;
+  nextDelayMs:  number;
+  delayMode:    string;
+  error?:       string;
+  lastRecipient?: { name: string; phone: string; status: "success" | "failed" | "retry" };
+}
 
 // ─── Group color map ──────────────────────────────────────────────────────────
 const GROUP_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -43,13 +73,110 @@ function gStyle(c: string) { return GROUP_COLORS[c] ?? GROUP_COLORS.indigo; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const SMART_VARS = [
-  { key: "{username}",      label: "@Username"      },
-  { key: "{nama}",          label: "Nama Affiliate" },
-  { key: "{campaign_name}", label: "Nama Campaign"  },
-  { key: "{deadline}",      label: "Deadline"       },
-  { key: "{reward}",        label: "Reward"         },
-  { key: "{link}",          label: "Link Join"      },
+  { key: "{username}",          label: "@Username"       },
+  { key: "{nama}",              label: "Nama Affiliate"  },
+  { key: "{campaign_name}",     label: "Nama Campaign"   },
+  { key: "{reward_section}",    label: "Reward Section"  },
+  { key: "{campaign_duration}", label: "Durasi Campaign" },
+  { key: "{join_link}",         label: "Link Join"       },
+  { key: "{pic_name}",          label: "Nama PIC"        },
 ];
+
+const REWARD_MODES: { id: RewardDisplayMode; label: string }[] = [
+  { id: "Auto Summary",  label: "⚡ Auto Summary"  },
+  { id: "Prize Pool",    label: "💰 Prize Pool"    },
+  { id: "Detail Reward", label: "🏆 Detail Reward" },
+  { id: "Custom Text",   label: "✏️ Custom"        },
+  { id: "Hide Reward",   label: "🚫 Sembunyikan"   },
+];
+
+const DURATION_FORMATS: { id: DurationFormat; label: string }[] = [
+  { id: "Date Range", label: "📅 Date Range" },
+  { id: "Total Days", label: "⏱️ Total Hari"  },
+];
+
+// ─── Reward helpers (client-side — mirrors server-side buildRewardSection) ─────
+interface RewardCfg {
+  leaderboard?: { rank?: number; reward?: number; label?: string }[];
+  fixed?:       { rewardPerVideo?: number };
+  consistency?: { rewardAmount?: number };
+  total?:       number;
+}
+
+function fmtRupiah(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} juta`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}rb`;
+  return n.toLocaleString("id-ID");
+}
+
+function generateRewardSection(
+  mode:            RewardDisplayMode,
+  rewardConfigJson = "{}",
+  rewardDeskripsi  = "",
+  customText       = "",
+): string {
+  if (mode === "Hide Reward") return "";
+  if (mode === "Custom Text") return customText ? `🎁 Reward:\n${customText}` : "(tulis custom reward...)";
+
+  let cfg: RewardCfg = {};
+  try { cfg = JSON.parse(rewardConfigJson) as RewardCfg; } catch { /* empty */ }
+
+  if (mode === "Auto Summary") {
+    const parts: string[] = [];
+    if (cfg.leaderboard?.length) {
+      const top = Math.max(...cfg.leaderboard.map((r) => r.reward ?? 0));
+      if (top > 0) parts.push(`hingga Rp${fmtRupiah(top)}`);
+    }
+    if (cfg.fixed?.rewardPerVideo)     parts.push(`Rp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`);
+    if (cfg.consistency?.rewardAmount) parts.push(`bonus konsistensi`);
+    if (parts.length) return `🎁 Reward ${parts.join(" + ")}`;
+    return rewardDeskripsi ? `🎁 Reward:\n${rewardDeskripsi}` : "🎁 Reward menarik menanti!";
+  }
+
+  if (mode === "Prize Pool") {
+    let total = cfg.total ?? 0;
+    if (!total && cfg.leaderboard?.length)
+      total = cfg.leaderboard.reduce((s, r) => s + (r.reward ?? 0), 0);
+    if (!total && cfg.consistency?.rewardAmount) total += cfg.consistency.rewardAmount;
+    if (!total && cfg.fixed?.rewardPerVideo)
+      return `🎁 Reward:\nRp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`;
+    return total > 0 ? `🎁 Total Prize Pool:\nRp${total.toLocaleString("id-ID")}` : "🎁 Reward menarik!";
+  }
+
+  if (mode === "Detail Reward") {
+    const lines = ["🏆 Reward:"];
+    if (cfg.leaderboard?.length) {
+      cfg.leaderboard.forEach((r) => {
+        lines.push(`${r.label || `Juara ${r.rank ?? "?"}`} — Rp${(r.reward ?? 0).toLocaleString("id-ID")}`);
+      });
+    }
+    if (cfg.fixed?.rewardPerVideo)     lines.push(`Rp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`);
+    if (cfg.consistency?.rewardAmount) lines.push(`+ Bonus konsistensi: Rp${fmtRupiah(cfg.consistency.rewardAmount)}`);
+    if (lines.length === 1) return rewardDeskripsi ? `🏆 Reward:\n${rewardDeskripsi}` : "🏆 Reward menarik!";
+    return lines.join("\n");
+  }
+
+  return rewardDeskripsi ? `🎁 Reward:\n${rewardDeskripsi}` : "🎁 Reward menarik!";
+}
+
+function generateDuration(
+  format:     DurationFormat,
+  startDate?: string | null,
+  endDate?:   string | null,
+): string {
+  if (!startDate && !endDate) return "[Durasi Campaign]";
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  if (format === "Total Days" && startDate && endDate) {
+    const days = Math.ceil(
+      (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24),
+    );
+    return `${days} Hari`;
+  }
+  if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`;
+  if (endDate)              return `s/d ${fmt(endDate)}`;
+  return fmt(startDate!);
+}
 
 const DELAY_MODES = [
   { id: "Fast",   label: "⚡ Fast",   desc: "10–25 detik",   cls: "text-amber-600"   },
@@ -79,14 +206,32 @@ function insertVar(textarea: HTMLTextAreaElement | null, v: string, setter: (s: 
   }, 0);
 }
 
-function resolvePreview(msg: string, previewRecipient = { username: "creator123", nama: "Budi Santoso" }) {
+interface PreviewVars {
+  reward_section?:    string;
+  campaign_duration?: string;
+  join_link?:         string;
+  pic_name?:          string;
+  campaign_name?:     string;
+}
+
+function resolvePreview(
+  msg:             string,
+  previewRecipient = { username: "creator123", nama: "Budi Santoso" },
+  campaignVars?:   PreviewVars,
+) {
+  const cv = campaignVars ?? {};
   return msg
-    .replace(/{username}/g, previewRecipient.username)
-    .replace(/{nama}/g, previewRecipient.nama)
-    .replace(/{campaign_name}/g, "[Nama Campaign]")
-    .replace(/{deadline}/g, "[Deadline]")
-    .replace(/{reward}/g, "[Reward]")
-    .replace(/{link}/g, "[Link Join]");
+    .replace(/{username}/g,          previewRecipient.username)
+    .replace(/{nama}/g,              previewRecipient.nama)
+    .replace(/{campaign_name}/g,     cv.campaign_name     || "[Nama Campaign]")
+    .replace(/{reward_section}/g,    cv.reward_section    || "[Reward Section]")
+    .replace(/{campaign_duration}/g, cv.campaign_duration || "[Durasi Campaign]")
+    .replace(/{join_link}/g,         cv.join_link         || "[Link Join]")
+    .replace(/{pic_name}/g,          cv.pic_name          || "[Nama PIC]")
+    // backward-compat
+    .replace(/{deadline}/g, cv.campaign_duration || "[Deadline]")
+    .replace(/{reward}/g,   cv.reward_section    || "[Reward]")
+    .replace(/{link}/g,     cv.join_link         || "[Link Join]");
 }
 
 function formatDate(d: string) {
@@ -96,13 +241,13 @@ function formatDate(d: string) {
 const CAMPAIGN_BROADCAST_TEMPLATE = `Halo {username}! 👋
 
 Kami mengundang kamu untuk join campaign:
-{campaign_name}
 
-🎁 Reward:
-{reward}
+🔥 {campaign_name}
 
-📅 Deadline:
-{deadline}
+{reward_section}
+
+🗓️ Durasi Campaign:
+{campaign_duration}
 
 🔗 Join sekarang:
 {join_link}
@@ -400,10 +545,123 @@ function TargetingPanel({ config, onChange, groups, categories, recipients, load
   );
 }
 
+// ─── Template Settings ────────────────────────────────────────────────────────
+function TemplateSettings({
+  campaign, rewardDisplayMode, setRewardDisplayMode,
+  customRewardText, setCustomRewardText, durationFormat, setDurationFormat,
+}: {
+  campaign:             CampaignSource;
+  rewardDisplayMode:    RewardDisplayMode;
+  setRewardDisplayMode: (m: RewardDisplayMode) => void;
+  customRewardText:     string;
+  setCustomRewardText:  (s: string) => void;
+  durationFormat:       DurationFormat;
+  setDurationFormat:    (f: DurationFormat) => void;
+}) {
+  const rewardPreview   = generateRewardSection(rewardDisplayMode, campaign.rewardConfig, campaign.rewardDeskripsi, customRewardText);
+  const durationPreview = generateDuration(durationFormat, campaign.startDate, campaign.endDate);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+      <div>
+        <h2 className="font-bold text-gray-900">⚙️ Template Settings</h2>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Konfigurasi variabel <code className="bg-gray-100 px-1 rounded text-[11px]">{"{reward_section}"}</code>{" "}
+          dan <code className="bg-gray-100 px-1 rounded text-[11px]">{"{campaign_duration}"}</code>
+        </p>
+      </div>
+
+      {/* Reward Display Mode */}
+      <div className="space-y-2.5">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Reward Display Mode</p>
+        <div className="flex flex-wrap gap-2">
+          {REWARD_MODES.map((m) => (
+            <button key={m.id} onClick={() => setRewardDisplayMode(m.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                rewardDisplayMode === m.id
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+              }`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {rewardDisplayMode === "Custom Text" && (
+          <textarea
+            value={customRewardText}
+            onChange={(e) => setCustomRewardText(e.target.value)}
+            rows={3}
+            placeholder="Contoh: Paid collaboration + free sample untuk creator terbaik"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        )}
+
+        {/* Reward preview box */}
+        <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5">
+            Preview <code className="bg-white px-1 rounded border border-gray-200">{"{reward_section}"}</code>
+          </p>
+          {rewardPreview ? (
+            <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{rewardPreview}</pre>
+          ) : (
+            <p className="text-xs text-gray-400 italic">(disembunyikan — tidak ditampilkan di pesan)</p>
+          )}
+        </div>
+      </div>
+
+      {/* Duration Format */}
+      <div className="space-y-2.5">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Duration Format</p>
+        <div className="flex gap-2">
+          {DURATION_FORMATS.map((f) => (
+            <button key={f.id} onClick={() => setDurationFormat(f.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                durationFormat === f.id
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+              }`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Duration preview box */}
+        <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5">
+            Preview <code className="bg-white px-1 rounded border border-gray-200">{"{campaign_duration}"}</code>
+          </p>
+          <p className="text-xs text-gray-700 font-medium">{durationPreview}</p>
+        </div>
+      </div>
+
+      {/* Campaign info chips */}
+      <div className="flex gap-2 flex-wrap pt-1 border-t border-gray-50">
+        {campaign.picSpecialist?.nama && (
+          <span className="text-xs bg-indigo-50 text-indigo-600 border border-indigo-100 px-2.5 py-1 rounded-full">
+            👤 PIC: {campaign.picSpecialist.nama}
+          </span>
+        )}
+        {campaign.startDate && (
+          <span className="text-xs bg-gray-50 text-gray-500 border border-gray-100 px-2.5 py-1 rounded-full">
+            📅 Mulai: {new Date(campaign.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        )}
+        {campaign.endDate && (
+          <span className="text-xs bg-gray-50 text-gray-500 border border-gray-100 px-2.5 py-1 rounded-full">
+            🏁 Selesai: {new Date(campaign.endDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Message Composer ─────────────────────────────────────────────────────────
-function MessageComposer({ message, setMessage, variations, setVariations }: {
+function MessageComposer({ message, setMessage, variations, setVariations, campaignVars }: {
   message: string; setMessage: (s: string) => void;
   variations: string[]; setVariations: (v: string[]) => void;
+  campaignVars?: PreviewVars;
 }) {
   const [activeVar, setActiveVar]     = useState(0); // 0 = main, 1+ = variation index
   const [showPreview, setShowPreview] = useState(false);
@@ -477,11 +735,15 @@ Halo {username}! 👋
 
 Kami mengundang kamu bergabung di campaign terbaru kami.
 
-💰 Reward: {reward}
-📅 Deadline: {deadline}
-🔗 Daftar: {link}
+{reward_section}
 
-Yuk join sekarang! 🚀"
+🗓️ Durasi Campaign:
+{campaign_duration}
+
+🔗 Join sekarang:
+{join_link}
+
+Yuk gas upload konten terbaik kamu 🚀"
             className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed" />
         ) : (
           <textarea
@@ -501,18 +763,31 @@ Yuk join sekarang! 🚀"
 
       {/* Preview toggle */}
       <button onClick={() => setShowPreview((v) => !v)}
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700">
+        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">
         <span>{showPreview ? "🔼" : "🔽"}</span>
-        {showPreview ? "Sembunyikan preview" : "Preview pesan"}
+        {showPreview ? "Sembunyikan preview" : "👁️ Preview pesan"}
       </button>
 
       {showPreview && message && (
-        <div className="bg-[#ECE5DD] rounded-2xl p-4 space-y-2">
-          <p className="text-xs text-gray-500 font-semibold">WhatsApp Preview</p>
-          <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-sm max-w-xs">
-            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{resolvePreview(message)}</p>
-            <p className="text-[10px] text-gray-400 mt-2 text-right">12:00 ✓✓</p>
+        <div className="space-y-3">
+          <div className="bg-[#ECE5DD] rounded-2xl p-4 space-y-2">
+            <p className="text-xs text-gray-500 font-semibold">WhatsApp Preview — creator123</p>
+            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-sm max-w-xs">
+              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                {resolvePreview(message, { username: "creator123", nama: "Budi Santoso" }, campaignVars)}
+              </p>
+              <p className="text-[10px] text-gray-400 mt-2 text-right">12:00 ✓✓</p>
+            </div>
           </div>
+          {campaignVars && (
+            <div className="text-xs text-gray-400 bg-gray-50 rounded-xl px-3 py-2 border border-gray-100 space-y-0.5">
+              <p className="font-semibold text-gray-500 mb-1">Variable Preview</p>
+              {campaignVars.reward_section    && <p><span className="font-mono text-indigo-500">{"{reward_section}"}</span> → {campaignVars.reward_section.split("\n")[0]}{campaignVars.reward_section.includes("\n") ? "…" : ""}</p>}
+              {campaignVars.campaign_duration && <p><span className="font-mono text-indigo-500">{"{campaign_duration}"}</span> → {campaignVars.campaign_duration}</p>}
+              {campaignVars.join_link         && <p><span className="font-mono text-indigo-500">{"{join_link}"}</span> → {campaignVars.join_link}</p>}
+              {campaignVars.pic_name          && <p><span className="font-mono text-indigo-500">{"{pic_name}"}</span> → {campaignVars.pic_name}</p>}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -659,14 +934,26 @@ function BroadcastPageInner() {
   const [message, setMessage]         = useState("");
   const [variations, setVariations]   = useState<string[]>([]);
   const [broadcastName, setBroadcastName] = useState("");
-  const [delayMode, setDelayMode]     = useState("Normal");
-  const [senderNumber, setSenderNumber] = useState("");
-  const [scheduledAt, setScheduledAt] = useState("");
+  const [delayMode, setDelayMode]         = useState("Normal");
+  const [senderNumber, setSenderNumber]   = useState("");
+  const [scheduledAt, setScheduledAt]     = useState("");
+
+  // Multi-session sender
+  type SenderMode = "Single" | "Rotation" | "Batch";
+  interface SessionSummary { id: number; name: string; phone: string; status: string; sentToday: number; dailyLimit: number; healthScore: number; }
+  const [senderMode, setSenderMode]           = useState<SenderMode>("Single");
+  const [senderSessionIds, setSenderSessionIds] = useState<number[]>([]);
+  const [availSessions, setAvailSessions]     = useState<SessionSummary[]>([]);
 
   // Campaign context (from ?campaign_id=xx)
   const [campaignSource, setCampaignSource] = useState<CampaignSource | null>(null);
-  const [campaignId, setCampaignId]       = useState<number | null>(null);
-  const [campaignName, setCampaignName]   = useState("");
+  const [campaignId, setCampaignId]         = useState<number | null>(null);
+  const [campaignName, setCampaignName]     = useState("");
+
+  // Template settings (reward + duration mode — campaign-context only)
+  const [rewardDisplayMode, setRewardDisplayMode] = useState<RewardDisplayMode>("Auto Summary");
+  const [customRewardText,  setCustomRewardText]  = useState("");
+  const [durationFormat,    setDurationFormat]    = useState<DurationFormat>("Date Range");
 
   // Queue monitor
   const [queueItems, setQueueItems]       = useState<WaQueueItem[]>([]);
@@ -674,6 +961,16 @@ function BroadcastPageInner() {
   const [monitorBroadcastId, setMonitorBroadcastId] = useState<number | null>(null);
   const [processingQueue, setProcessingQueue] = useState(false);
   const [showMonitor, setShowMonitor]     = useState(false);
+
+  // Auto-send loop
+  const [isAutoRunning, setIsAutoRunning] = useState(false);
+  const [countdown, setCountdown]         = useState(0);
+  const [autoLog, setAutoLog]             = useState<AutoLogEntry[]>([]);
+  const isAutoRunningRef                  = useRef(false);
+  const monitorBroadcastIdRef             = useRef<number | null>(null);
+  const autoTimerRef                      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef                      = useRef(0);
+  const runNextRef                        = useRef<() => Promise<void>>(async () => {});
 
   // WA session status (from Automation Center)
   const [waStatus, setWaStatus] = useState<{
@@ -698,6 +995,17 @@ function BroadcastPageInner() {
         if (d.status === "connected" && d.phone) {
           setSenderNumber(d.phone);
         }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Fetch available WA sessions for sender picker
+  const fetchAvailSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/wa-sessions");
+      if (res.ok) {
+        const data = await res.json() as SessionSummary[];
+        setAvailSessions(Array.isArray(data) ? data : []);
       }
     } catch { /* ignore */ }
   }, []);
@@ -731,10 +1039,11 @@ function BroadcastPageInner() {
   useEffect(() => {
     void loadAll();
     void fetchWaStatus();
+    void fetchAvailSessions();
     // Poll WA status every 15s to catch connect/disconnect changes
-    const poll = setInterval(() => { void fetchWaStatus(); }, 15_000);
+    const poll = setInterval(() => { void fetchWaStatus(); void fetchAvailSessions(); }, 15_000);
     return () => clearInterval(poll);
-  }, [loadAll, fetchWaStatus]);
+  }, [loadAll, fetchWaStatus, fetchAvailSessions]);
 
   // Handle campaign_id from URL
   useEffect(() => {
@@ -805,17 +1114,25 @@ function BroadcastPageInner() {
       const r = await fetch("/api/broadcast", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name:         broadcastName,
+          name:              broadcastName,
           message,
           variations,
-          targetJson:   buildTargetJson(),
+          targetJson:        buildTargetJson(),
           delayMode,
           senderNumber,
-          totalQueued:  recipients.withWA,
-          status:       "queued",
-          scheduledAt:  scheduledAt || null,
-          campaignId:   campaignId ?? undefined,
-          campaignName: campaignName || undefined,
+          senderMode,
+          senderSessionIds: senderMode !== "Single" ? senderSessionIds : [],
+          totalQueued:       recipients.withWA,
+          status:            "queued",
+          scheduledAt:       scheduledAt || null,
+          campaignId:        campaignId ?? undefined,
+          campaignName:      campaignName || undefined,
+          // Template engine settings (campaign context only)
+          ...(campaignSource ? {
+            rewardDisplayMode,
+            customRewardText: rewardDisplayMode === "Custom Text" ? customRewardText : undefined,
+            durationFormat,
+          } : {}),
         }),
       });
       if (r.ok) {
@@ -878,13 +1195,110 @@ function BroadcastPageInner() {
     await loadAll();
   }
 
+  // Keep broadcast ID ref in sync with state (used inside interval closures)
+  useEffect(() => { monitorBroadcastIdRef.current = monitorBroadcastId; }, [monitorBroadcastId]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isAutoRunningRef.current = false;
+      if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+    };
+  }, []);
+
+  const stopAutoRun = useCallback(() => {
+    isAutoRunningRef.current = false;
+    setIsAutoRunning(false);
+    setCountdown(0);
+    countdownRef.current = 0;
+    if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
+  }, []);
+
+  const runNext = useCallback(async () => {
+    if (!isAutoRunningRef.current) return;
+    const bid = monitorBroadcastIdRef.current;
+    if (!bid) { stopAutoRun(); return; }
+
+    try {
+      const r = await fetch(`/api/wa-queue/process?limit=1&broadcastId=${bid}`, { method: "POST" });
+      if (!r.ok) { stopAutoRun(); showToast("❌ Auto-send error — dihentikan"); return; }
+
+      const d = await r.json() as ProcessResult;
+
+      if (!d.waConnected) {
+        showToast("⚠️ WA tidak terhubung — auto-send dihentikan");
+        stopAutoRun();
+        return;
+      }
+
+      // Add to live log
+      if (d.lastRecipient) {
+        const waitSec = d.remaining > 0 ? Math.round((d.nextDelayMs || 0) / 1000) : 0;
+        setAutoLog((prev) => [{
+          ts:      new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          name:    d.lastRecipient!.name || d.lastRecipient!.phone,
+          phone:   d.lastRecipient!.phone,
+          status:  d.lastRecipient!.status,
+          waitSec,
+        }, ...prev].slice(0, 50));
+      }
+
+      // Refresh queue view (non-blocking)
+      void loadQueue(bid);
+
+      if (!isAutoRunningRef.current) return;
+
+      // All done — auto-stop
+      if (d.remaining === 0) {
+        stopAutoRun();
+        showToast("✅ Semua pesan berhasil terkirim!");
+        void loadAll();
+        return;
+      }
+
+      // Start countdown to next send
+      const delayMs  = d.nextDelayMs || 30_000;
+      const delaySec = Math.round(delayMs / 1000);
+      countdownRef.current = delaySec;
+      setCountdown(delaySec);
+
+      if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+      autoTimerRef.current = setInterval(() => {
+        countdownRef.current -= 1;
+        setCountdown(countdownRef.current);
+        if (countdownRef.current <= 0) {
+          if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
+          if (isAutoRunningRef.current) void runNextRef.current();
+        }
+      }, 1000);
+
+    } catch (err) {
+      console.error("[auto-send]", err);
+      stopAutoRun();
+      showToast("❌ Auto-send error — dihentikan");
+    }
+  }, [loadQueue, loadAll, stopAutoRun]);
+
+  // Keep runNextRef in sync so interval always calls the latest version
+  useEffect(() => { runNextRef.current = runNext; }, [runNext]);
+
+  const startAutoRun = useCallback(() => {
+    if (isAutoRunningRef.current) return;
+    if (!monitorBroadcastIdRef.current) return;
+    isAutoRunningRef.current = true;
+    setIsAutoRunning(true);
+    setCountdown(0);
+    setAutoLog([]);
+    void runNext();
+  }, [runNext]);
+
   async function handleProcessQueue() {
     if (!monitorBroadcastId) return;
     setProcessingQueue(true);
     try {
-      const r = await fetch("/api/wa-queue/process?limit=1", { method: "POST" });
+      const r = await fetch(`/api/wa-queue/process?limit=1&broadcastId=${monitorBroadcastId}`, { method: "POST" });
       if (r.ok) {
-        const d = await r.json() as { processed: number; success: number; failed: number; waConnected: boolean; error?: string };
+        const d = await r.json() as ProcessResult;
         if (!d.waConnected) { showToast("⚠️ WA tidak terhubung. Hubungkan dulu di Automation Center."); }
         else if (d.error) { showToast(`❌ ${d.error}`); }
         else { showToast(`✅ Diproses: ${d.processed} pesan (${d.success} sukses, ${d.failed} gagal)`); }
@@ -895,6 +1309,8 @@ function BroadcastPageInner() {
   }
 
   async function openMonitor(broadcastId: number) {
+    if (isAutoRunningRef.current) { stopAutoRun(); }
+    setAutoLog([]);
     setMonitorBroadcastId(broadcastId);
     setShowMonitor(true);
     await loadQueue(broadcastId);
@@ -1011,9 +1427,34 @@ function BroadcastPageInner() {
               onChange={(e) => setBroadcastName(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
-          <MessageComposer message={message} setMessage={setMessage} variations={variations} setVariations={setVariations} />
+          <MessageComposer
+            message={message}
+            setMessage={setMessage}
+            variations={variations}
+            setVariations={setVariations}
+            campaignVars={campaignSource ? {
+              campaign_name:     campaignSource.nama,
+              reward_section:    generateRewardSection(rewardDisplayMode, campaignSource.rewardConfig, campaignSource.rewardDeskripsi, customRewardText),
+              campaign_duration: generateDuration(durationFormat, campaignSource.startDate, campaignSource.endDate),
+              join_link:         campaignSource.joinSlug ? `${typeof window !== "undefined" ? window.location.origin : ""}/join/${campaignSource.joinSlug}` : "",
+              pic_name:          campaignSource.picSpecialist?.nama || "",
+            } : undefined}
+          />
         </div>
       </div>
+
+      {/* Template Settings — only shown when campaign context is active */}
+      {campaignSource && (
+        <TemplateSettings
+          campaign={campaignSource}
+          rewardDisplayMode={rewardDisplayMode}
+          setRewardDisplayMode={setRewardDisplayMode}
+          customRewardText={customRewardText}
+          setCustomRewardText={setCustomRewardText}
+          durationFormat={durationFormat}
+          setDurationFormat={setDurationFormat}
+        />
+      )}
 
       {/* Delivery Settings */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -1050,6 +1491,80 @@ function BroadcastPageInner() {
               />
             </div>
 
+            {/* ── Multi-Sender Mode ────────────────────────────────────────── */}
+            {availSessions.length > 1 && (
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sender Mode</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Single", "Rotation", "Batch"] as SenderMode[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setSenderMode(m)}
+                      className={`py-2 px-3 rounded-lg text-xs font-medium border transition-all text-center ${senderMode === m ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                    >
+                      {m === "Single" ? "☝️ Single" : m === "Rotation" ? "🔄 Rotasi" : "📦 Batch"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400">
+                  {senderMode === "Single" && "Semua pesan dikirim dari 1 akun (default primary)."}
+                  {senderMode === "Rotation" && "Akun bergantian per pesan — distribusi merata."}
+                  {senderMode === "Batch" && "Pembagian merata: setiap akun dapat blok penerima sendiri."}
+                </p>
+
+                {/* Session picker (shown for Rotation & Batch) */}
+                {senderMode !== "Single" && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-600">Pilih Akun Sender:</p>
+                    {availSessions.map((sess) => {
+                      const connected = sess.status === "CONNECTED";
+                      const pct       = sess.dailyLimit > 0 ? Math.min(100, Math.round((sess.sentToday / sess.dailyLimit) * 100)) : 0;
+                      const sel       = senderSessionIds.includes(sess.id);
+                      return (
+                        <label
+                          key={sess.id}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${sel ? "border-indigo-300 bg-indigo-50" : connected ? "border-gray-200 hover:border-gray-300" : "border-gray-100 opacity-50 cursor-not-allowed"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!connected}
+                            checked={sel}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSenderSessionIds((prev) => [...prev, sess.id]);
+                              } else {
+                                setSenderSessionIds((prev) => prev.filter((id) => id !== sess.id));
+                              }
+                            }}
+                            className="text-indigo-600 rounded"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? "bg-emerald-400" : "bg-gray-300"}`}/>
+                              <span className="text-xs font-medium text-gray-800 truncate">{sess.name}</span>
+                              {sess.phone && <span className="text-xs text-gray-400">+{sess.phone}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 bg-gray-100 rounded-full h-1 overflow-hidden">
+                                <div className={`h-full rounded-full ${pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${pct}%` }}/>
+                              </div>
+                              <span className="text-xs text-gray-400 whitespace-nowrap">{sess.sentToday}/{sess.dailyLimit}</span>
+                            </div>
+                          </div>
+                          <span className={`text-xs shrink-0 ${sess.healthScore >= 90 ? "text-emerald-600" : sess.healthScore >= 60 ? "text-amber-600" : "text-red-500"}`}>
+                            {sess.healthScore.toFixed(0)}%
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {senderSessionIds.length === 0 && (
+                      <p className="text-xs text-amber-500">⚠️ Pilih minimal 1 akun sender</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Jadwalkan Pengiriman (opsional)</label>
               <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)}
@@ -1071,6 +1586,10 @@ function BroadcastPageInner() {
                 <span className="font-medium text-gray-800">{variations.length + 1} variasi</span>
                 <span className="text-gray-400">Delay mode</span>
                 <span className="font-medium text-gray-800">{delayMode}</span>
+                <span className="text-gray-400">Sender mode</span>
+                <span className="font-medium text-gray-800">
+                  {senderMode === "Single" ? "Single" : senderMode === "Rotation" ? `Rotasi (${senderSessionIds.length} akun)` : `Batch (${senderSessionIds.length} akun)`}
+                </span>
                 <span className="text-gray-400">WA Pengirim</span>
                 <span className={`font-medium ${waConnected ? "text-emerald-600" : "text-red-500"}`}>
                   {waConnected ? senderNumber || waStatus.phone || "—" : "Belum terhubung"}
@@ -1124,21 +1643,39 @@ function BroadcastPageInner() {
               <h3 className="font-bold text-gray-900">📡 Queue Monitor</h3>
               <p className="text-xs text-gray-400 mt-0.5">Broadcast #{monitorBroadcastId} — delivery log real-time</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => loadQueue(monitorBroadcastId)}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => void loadQueue(monitorBroadcastId!)}
                 className="border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
                 🔄 Refresh
               </button>
-              <button onClick={handleProcessQueue} disabled={processingQueue || queueSummary.pending === 0}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${processingQueue || queueSummary.pending === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>
-                {processingQueue ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Proses...
-                  </span>
-                ) : "▶ Process Now"}
-              </button>
-              <button onClick={() => setShowMonitor(false)}
+
+              {/* Countdown pill (shown when auto-running and waiting) */}
+              {isAutoRunning && countdown > 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-mono font-semibold">
+                  ⏱ {countdown}s
+                </span>
+              )}
+
+              {/* Start Auto / Stop toggle */}
+              {!isAutoRunning ? (
+                <button
+                  onClick={startAutoRun}
+                  disabled={queueSummary.pending === 0 && queueSummary.retry === 0}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    queueSummary.pending === 0 && queueSummary.retry === 0
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                  }`}>
+                  ▶ Start Auto
+                </button>
+              ) : (
+                <button onClick={stopAutoRun}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all">
+                  ⏸ Stop
+                </button>
+              )}
+
+              <button onClick={() => { stopAutoRun(); setShowMonitor(false); }}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-gray-600 transition-colors text-sm">✕</button>
             </div>
           </div>
@@ -1160,6 +1697,53 @@ function BroadcastPageInner() {
               Total: {Object.values(queueSummary).reduce((a, b) => a + b, 0)} pesan
             </p>
           </div>
+
+          {/* Live auto-send log */}
+          {(isAutoRunning || autoLog.length > 0) && (
+            <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Log</p>
+                {isAutoRunning ? (
+                  <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Auto-send aktif
+                    {countdown > 0 && (
+                      <span className="text-gray-400">
+                        — kirim berikutnya dalam{" "}
+                        <span className="font-mono font-bold text-amber-600">{countdown}s</span>
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Selesai</span>
+                )}
+              </div>
+              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                {autoLog.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">Menunggu kiriman pertama...</p>
+                ) : autoLog.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[11px] py-0.5">
+                    <span className="text-gray-400 font-mono shrink-0">{entry.ts}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      entry.status === "success" ? "bg-emerald-400" :
+                      entry.status === "failed"  ? "bg-red-400"     : "bg-violet-400"
+                    }`} />
+                    <span className="font-medium text-gray-700 truncate min-w-0">{entry.name}</span>
+                    <span className="text-gray-400 font-mono shrink-0">{entry.phone}</span>
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                      entry.status === "success" ? "bg-emerald-50 text-emerald-700" :
+                      entry.status === "failed"  ? "bg-red-50 text-red-700"         : "bg-violet-50 text-violet-700"
+                    }`}>
+                      {entry.status === "success" ? "✓ Terkirim" : entry.status === "failed" ? "✗ Gagal" : "↺ Retry"}
+                    </span>
+                    {entry.waitSec > 0 && (
+                      <span className="text-gray-300 text-[10px] shrink-0">→ {entry.waitSec}s</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Queue table */}
           {queueItems.length === 0 ? (

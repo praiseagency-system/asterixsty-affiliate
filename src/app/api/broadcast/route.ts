@@ -48,9 +48,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const targetJson   = typeof body.targetJson === "string" ? body.targetJson : JSON.stringify(body.targetJson ?? {});
-    const variations   = Array.isArray(body.variations) ? (body.variations as string[]) : [];
-    const delayMode    = String(body.delayMode    || "Normal");
+    const targetJson        = typeof body.targetJson === "string" ? body.targetJson : JSON.stringify(body.targetJson ?? {});
+    const variations        = Array.isArray(body.variations) ? (body.variations as string[]) : [];
+    const delayMode         = String(body.delayMode         || "Normal");
+    const rewardDisplayMode = String(body.rewardDisplayMode || "Auto Summary");
+    const customRewardText  = String(body.customRewardText  || "");
+    const durationFormat    = String(body.durationFormat    || "Date Range");
+    const senderMode        = String(body.senderMode || "Single");
+    const senderSessionIds: number[] = Array.isArray(body.senderSessionIds)
+      ? (body.senderSessionIds as number[]).filter((n) => !isNaN(Number(n))).map(Number)
+      : [];
     // Auto-use connected phone if sender not supplied
     const senderNumber = String(body.senderNumber || waState.phone || "").trim();
     const scheduledAt  = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
@@ -97,16 +104,18 @@ export async function POST(req: Request) {
     // Create broadcast record
     const broadcast = await prisma.recruitmentBroadcast.create({
       data: {
-        name:         String(body.name || "").trim(),
+        name:            String(body.name || "").trim(),
         message,
-        variations:   JSON.stringify(variations),
+        variations:      JSON.stringify(variations),
         targetJson,
         delayMode,
         senderNumber,
-        totalQueued:  validRecipients.length,
-        totalSent:    0,
-        totalFailed:  0,
-        status:       validRecipients.length > 0 ? "queued" : "draft",
+        senderMode,
+        senderSessionIds: JSON.stringify(senderSessionIds),
+        totalQueued:     validRecipients.length,
+        totalSent:       0,
+        totalFailed:     0,
+        status:          validRecipients.length > 0 ? "queued" : "draft",
         scheduledAt,
       },
     });
@@ -118,21 +127,38 @@ export async function POST(req: Request) {
       if (campaignId) {
         const campaign = await prisma.campaign.findUnique({
           where: { id: campaignId },
-          select: { nama: true, endDate: true, rewardConfig: true, joinSlug: true },
+          select: {
+            nama:            true,
+            startDate:       true,
+            endDate:         true,
+            rewardConfig:    true,
+            rewardDeskripsi: true,
+            joinSlug:        true,
+            picSpecialist:   { select: { nama: true } },
+          },
         });
         if (campaign) {
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+          const baseUrl          = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+          const joinLink         = campaign.joinSlug ? `${baseUrl}/join/${campaign.joinSlug}` : baseUrl;
+          const rewardSection    = buildRewardSection(rewardDisplayMode, campaign.rewardConfig, campaign.rewardDeskripsi ?? "", customRewardText);
+          const campaignDuration = buildCampaignDuration(durationFormat, campaign.startDate, campaign.endDate);
+          const picName          = campaign.picSpecialist?.nama ?? "";
+
           campaignMsgVars = {
-            campaign_name: campaign.nama,
-            deadline:      campaign.endDate
-              ? new Date(campaign.endDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
-              : "TBD",
-            join_link: campaign.joinSlug ? `${baseUrl}/join/${campaign.joinSlug}` : baseUrl,
-            reward:    extractRewardSummary(campaign.rewardConfig),
+            campaign_name:      campaign.nama,
+            reward_section:     rewardSection,
+            campaign_duration:  campaignDuration,
+            join_link:          joinLink,
+            pic_name:           picName,
+            // backward-compat aliases
+            reward:             rewardSection,
+            deadline:           campaignDuration,
+            link:               joinLink,
           };
         }
       }
 
+      const totalRecipients = validRecipients.length;
       const queueEntries = validRecipients.map((aff, idx) => {
         // Spin: pick a random message variant per recipient
         const baseMsg = allMessages[idx % allMessages.length];
@@ -142,17 +168,20 @@ export async function POST(req: Request) {
           ...campaignMsgVars,
         });
 
+        const assignedSessionId = assignSenderSession(idx, senderMode, senderSessionIds, totalRecipients);
+
         return {
-          broadcastId:   broadcast.id,
-          phone:         aff.noWhatsapp,
-          message:       resolved,
-          recipientName: aff.namaAffiliator || aff.tiktokUsername,
+          broadcastId:    broadcast.id,
+          phone:          aff.noWhatsapp,
+          message:        resolved,
+          recipientName:  aff.namaAffiliator || aff.tiktokUsername,
           tiktokUsername: aff.tiktokUsername,
           campaignId,
-          campaignName:  campaignName || campaignMsgVars.campaign_name || "",
+          campaignName:   campaignName || campaignMsgVars.campaign_name || "",
           delayMode,
-          status:        "pending" as const,
+          status:         "pending" as const,
           scheduledAt,
+          ...(assignedSessionId !== null ? { senderSessionId: assignedSessionId } : {}),
         };
       });
 
@@ -180,24 +209,105 @@ export async function POST(req: Request) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function assignSenderSession(
+  idx:        number,
+  mode:       string,
+  sessionIds: number[],
+  total:      number,
+): number | null {
+  if (!sessionIds.length) return null;
+  if (mode === "Single")   return sessionIds[0];
+  if (mode === "Rotation") return sessionIds[idx % sessionIds.length];
+  if (mode === "Batch") {
+    const batchSize = Math.ceil(total / sessionIds.length);
+    return sessionIds[Math.min(Math.floor(idx / batchSize), sessionIds.length - 1)];
+  }
+  return null;
+}
+
 function resolveMessage(msg: string, vars: Record<string, string>): string {
   return msg.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
-function extractRewardSummary(rewardConfigJson: string): string {
-  try {
-    const cfg = JSON.parse(rewardConfigJson) as {
-      fixed?:      { rewardPerVideo?: number };
-      leaderboard?: { rank?: number; reward?: number }[];
-      consistency?: { rewardAmount?: number };
-    };
+interface RewardCfg {
+  leaderboard?: { rank?: number; reward?: number; label?: string }[];
+  fixed?:       { rewardPerVideo?: number };
+  consistency?: { rewardAmount?: number };
+  total?:       number;
+}
+
+function fmtRupiah(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} juta`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}rb`;
+  return n.toLocaleString("id-ID");
+}
+
+function buildRewardSection(
+  mode:             string,
+  rewardConfigJson: string,
+  rewardDeskripsi:  string,
+  customText:       string,
+): string {
+  if (mode === "Hide Reward") return "";
+  if (mode === "Custom Text") return customText ? `🎁 Reward:\n${customText}` : "";
+
+  let cfg: RewardCfg = {};
+  try { cfg = JSON.parse(rewardConfigJson) as RewardCfg; } catch { /* empty */ }
+
+  if (mode === "Auto Summary") {
     const parts: string[] = [];
     if (cfg.leaderboard?.length) {
-      const top = cfg.leaderboard.find((r) => r.rank === 1);
-      if (top?.reward) parts.push(`Rank 1: Rp${(top.reward / 1000).toFixed(0)}rb`);
+      const top = Math.max(...cfg.leaderboard.map((r) => r.reward ?? 0));
+      if (top > 0) parts.push(`hingga Rp${fmtRupiah(top)}`);
     }
-    if (cfg.fixed?.rewardPerVideo) parts.push(`Rp${cfg.fixed.rewardPerVideo.toLocaleString("id-ID")}/video`);
-    if (cfg.consistency?.rewardAmount) parts.push(`Consistency: Rp${(cfg.consistency.rewardAmount / 1000).toFixed(0)}rb`);
-    return parts.join(" · ") || "Lihat detail campaign";
-  } catch { return "Lihat detail campaign"; }
+    if (cfg.fixed?.rewardPerVideo)   parts.push(`Rp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`);
+    if (cfg.consistency?.rewardAmount) parts.push(`bonus konsistensi`);
+    if (parts.length) return `🎁 Reward ${parts.join(" + ")}`;
+    return rewardDeskripsi ? `🎁 Reward:\n${rewardDeskripsi}` : "🎁 Reward menarik menanti!";
+  }
+
+  if (mode === "Prize Pool") {
+    let total = cfg.total ?? 0;
+    if (!total && cfg.leaderboard?.length)
+      total = cfg.leaderboard.reduce((s, r) => s + (r.reward ?? 0), 0);
+    if (!total && cfg.consistency?.rewardAmount) total += cfg.consistency.rewardAmount;
+    if (!total && cfg.fixed?.rewardPerVideo)
+      return `🎁 Reward:\nRp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`;
+    return total > 0 ? `🎁 Total Prize Pool:\nRp${total.toLocaleString("id-ID")}` : "🎁 Reward menarik!";
+  }
+
+  if (mode === "Detail Reward") {
+    const lines = ["🏆 Reward:"];
+    if (cfg.leaderboard?.length) {
+      cfg.leaderboard.forEach((r) => {
+        lines.push(`${r.label || `Juara ${r.rank ?? "?"}`} — Rp${(r.reward ?? 0).toLocaleString("id-ID")}`);
+      });
+    }
+    if (cfg.fixed?.rewardPerVideo)     lines.push(`Rp${fmtRupiah(cfg.fixed.rewardPerVideo)}/video`);
+    if (cfg.consistency?.rewardAmount) lines.push(`+ Bonus konsistensi: Rp${fmtRupiah(cfg.consistency.rewardAmount)}`);
+    if (lines.length === 1) return rewardDeskripsi ? `🏆 Reward:\n${rewardDeskripsi}` : "🏆 Reward menarik!";
+    return lines.join("\n");
+  }
+
+  return rewardDeskripsi ? `🎁 Reward:\n${rewardDeskripsi}` : "🎁 Reward menarik!";
+}
+
+function buildCampaignDuration(
+  format:    string,
+  startDate: Date | null,
+  endDate:   Date | null,
+): string {
+  if (!startDate && !endDate) return "";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
+  if (format === "Total Days" && startDate && endDate) {
+    const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    return `${days} Hari`;
+  }
+
+  // Date Range (default)
+  if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`;
+  if (endDate)              return `s/d ${fmt(endDate)}`;
+  return fmt(startDate!);
 }

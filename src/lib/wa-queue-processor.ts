@@ -10,15 +10,22 @@
 
 import { getPrisma } from "@/lib/prisma";
 import { sendWAMessage, getWAState } from "@/lib/wa-client";
+import { sendViaMultiSession } from "@/lib/wa-multi-client";
 
 export interface ProcessResult {
-  processed: number;
-  success:   number;
-  failed:    number;
-  skipped:   number;
-  remaining: number;
+  processed:   number;
+  success:     number;
+  failed:      number;
+  skipped:     number;
+  remaining:   number;
   waConnected: boolean;
-  error?: string;
+  error?:      string;
+  /** Suggested ms to wait before the next process call (based on delayMode of item). */
+  nextDelayMs:    number;
+  /** delayMode of the last processed item ("Fast" | "Normal" | "Safe"). */
+  delayMode:      string;
+  /** Info about the last processed recipient (for live log). */
+  lastRecipient?: { name: string; phone: string; status: "success" | "failed" | "retry" };
 }
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -32,41 +39,53 @@ function getDelay(mode: string): number {
 
 /**
  * Process up to `limit` pending queue items.
- * If respectDelay is true, sleeps between sends (use false for quick tests).
+ * @param limit         Max items to process in this call (default 5).
+ * @param respectDelay  If true, sleeps between sends server-side.
+ *                      Set false when the client drives timing via nextDelayMs.
+ * @param broadcastId   Optional — restrict processing to one broadcast's queue.
  */
 export async function processWaQueue(
   limit = 5,
   respectDelay = true,
+  broadcastId?: number,
 ): Promise<ProcessResult> {
   const prisma = getPrisma();
-  const state = getWAState();
+  const state  = getWAState();
 
-  const remaining = await prisma.waMessageQueue.count({
-    where: {
-      status: { in: ["pending", "retry"] },
-      OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
-    },
-  });
+  const queueWhere = {
+    status: { in: ["pending" as const, "retry" as const] },
+    OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+    ...(broadcastId ? { broadcastId } : {}),
+  };
+
+  const remaining = await prisma.waMessageQueue.count({ where: queueWhere });
 
   if (!state || state.status !== "connected") {
     return {
-      processed: 0, success: 0, failed: 0, skipped: 0,
+      processed:   0,
+      success:     0,
+      failed:      0,
+      skipped:     0,
       remaining,
       waConnected: false,
+      nextDelayMs: 0,
+      delayMode:   "Normal",
       error: "WhatsApp tidak terhubung. Hubungkan WA terlebih dahulu di Automation Center.",
     };
   }
 
   const items = await prisma.waMessageQueue.findMany({
-    where: {
-      status: { in: ["pending", "retry"] },
-      OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
-    },
+    where:   queueWhere,
     orderBy: { createdAt: "asc" },
-    take: limit,
+    take:    limit,
   });
 
   let success = 0, failed = 0, skipped = 0;
+
+  // Track last-processed info to return to caller (used by client-driven loop)
+  let lastDelayMs   = 30_000;
+  let lastDelayMode = "Normal";
+  let lastRecipient: ProcessResult["lastRecipient"] | undefined;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -77,6 +96,7 @@ export async function processWaQueue(
         data: { status: "failed", errorReason: "Nomor WA tidak tersedia", attempts: item.attempts + 1 },
       });
       failed++;
+      lastRecipient = { name: item.recipientName ?? "", phone: "", status: "failed" };
       continue;
     }
 
@@ -86,14 +106,20 @@ export async function processWaQueue(
       data:  { status: "processing", attempts: item.attempts + 1 },
     });
 
-    const result = await sendWAMessage(item.phone, item.message);
+    let result: { ok: boolean; error?: string };
+    if (item.senderSessionId && item.senderSessionId > 1) {
+      result = await sendViaMultiSession(item.senderSessionId, item.phone, item.message);
+    } else {
+      result = await sendWAMessage(item.phone, item.message);
+    }
 
     if (result.ok) {
       await prisma.waMessageQueue.update({
         where: { id: item.id },
-        data:  { status: "success", sentAt: new Date(), errorReason: "" },
+        data:  { status: "success", sentAt: new Date(), errorReason: "", senderPhone: item.senderPhone || state.phone || "" },
       });
       success++;
+      lastRecipient = { name: item.recipientName ?? "", phone: item.phone, status: "success" };
 
       // Update parent broadcast sent count
       if (item.broadcastId) {
@@ -104,14 +130,20 @@ export async function processWaQueue(
       }
     } else {
       const isLastAttempt = item.attempts + 1 >= item.maxAttempts;
+      const newStatus = isLastAttempt ? "failed" : "retry";
       await prisma.waMessageQueue.update({
         where: { id: item.id },
         data:  {
-          status:      isLastAttempt ? "failed" : "retry",
+          status:      newStatus,
           errorReason: result.error ?? "Send failed",
         },
       });
       failed++;
+      lastRecipient = {
+        name:   item.recipientName ?? "",
+        phone:  item.phone,
+        status: newStatus === "failed" ? "failed" : "retry",
+      };
 
       if (item.broadcastId) {
         await prisma.recruitmentBroadcast.update({
@@ -120,6 +152,10 @@ export async function processWaQueue(
         });
       }
     }
+
+    // Track delay info from the last processed item
+    lastDelayMs   = getDelay(item.delayMode);
+    lastDelayMode = item.delayMode;
 
     // Delay before next message (skip for last item)
     if (respectDelay && i < items.length - 1) {
@@ -145,15 +181,19 @@ export async function processWaQueue(
     where: {
       status: { in: ["pending", "retry"] },
       OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+      ...(broadcastId ? { broadcastId } : {}),
     },
   });
 
   return {
-    processed: items.length,
+    processed:     items.length,
     success,
     failed,
     skipped,
-    remaining: newRemaining,
-    waConnected: true,
+    remaining:     newRemaining,
+    waConnected:   true,
+    nextDelayMs:   lastDelayMs,
+    delayMode:     lastDelayMode,
+    lastRecipient,
   };
 }

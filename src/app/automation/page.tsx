@@ -12,6 +12,25 @@ interface WAState {
   error: string | null;
 }
 
+// Multi-session types
+type SessionStatus = "CONNECTED" | "DISCONNECTED" | "CONNECTING" | "QR_READY" | "RECONNECTING" | "LIMITED" | "WARMUP" | "BANNED";
+interface WaSession {
+  id:          number;
+  name:        string;
+  phone:       string;
+  status:      SessionStatus;
+  isActive:    boolean;
+  isDefault:   boolean;
+  dailyLimit:  number;
+  sentToday:   number;
+  healthScore: number;
+  failCount:   number;
+  successCount: number;
+  qrDataUrl:   string | null;
+  connectedAt: string | null;
+  createdAt:   string;
+}
+
 interface AutomationConfig {
   automationEnabled: boolean;
   waAutomationEnabled: boolean;
@@ -45,6 +64,30 @@ interface RunResult {
   skipped: number;
   failed: number;
   errors: string[];
+}
+
+// ── Session health helpers ─────────────────────────────────────────────────────
+function sessionStatusMeta(s: SessionStatus): { dot: string; badge: string; text: string; label: string } {
+  switch (s) {
+    case "CONNECTED":    return { dot: "bg-emerald-400 animate-pulse", badge: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Terhubung" };
+    case "QR_READY":     return { dot: "bg-violet-400 animate-pulse",  badge: "bg-violet-50 border-violet-200",  text: "text-violet-700",  label: "Scan QR" };
+    case "CONNECTING":
+    case "RECONNECTING": return { dot: "bg-amber-400 animate-pulse",   badge: "bg-amber-50 border-amber-200",   text: "text-amber-700",   label: s === "CONNECTING" ? "Menghubungkan…" : "Menyambung ulang…" };
+    case "LIMITED":      return { dot: "bg-orange-400",                badge: "bg-orange-50 border-orange-200", text: "text-orange-700",  label: "Limit Tercapai" };
+    case "WARMUP":       return { dot: "bg-sky-400 animate-pulse",     badge: "bg-sky-50 border-sky-200",       text: "text-sky-700",     label: "Warmup" };
+    case "BANNED":       return { dot: "bg-red-500",                   badge: "bg-red-50 border-red-200",       text: "text-red-700",     label: "Banned" };
+    default:             return { dot: "bg-gray-300",                  badge: "bg-gray-50 border-gray-200",     text: "text-gray-500",    label: "Terputus" };
+  }
+}
+function healthColor(score: number): string {
+  if (score >= 90) return "text-emerald-600";
+  if (score >= 60) return "text-amber-600";
+  return "text-red-500";
+}
+function healthLabel(score: number): string {
+  if (score >= 90) return "Healthy";
+  if (score >= 60) return "Warning";
+  return "Critical";
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -137,6 +180,126 @@ export default function AutomationPage() {
   const [savingConfig, setSavingConfig] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Multi-session state ────────────────────────────────────────────────────
+  const [sessions, setSessions]         = useState<WaSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addingSession, setAddingSession] = useState(false);
+  const [newSessionName, setNewSessionName] = useState("");
+  const [newSessionLimit, setNewSessionLimit] = useState(200);
+  const [connectingId, setConnectingId] = useState<number | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [qrSessionId, setQrSessionId] = useState<number | null>(null);
+  const sessionPollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ── Fetch sessions ─────────────────────────────────────────────────────────
+  const fetchSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const res = await fetch("/api/wa-sessions");
+      if (res.ok) {
+        const data = await res.json() as WaSession[];
+        setSessions(Array.isArray(data) ? data : []);
+        // Sync primary waState from session 1
+        const primary = data.find((s) => s.id === 1);
+        if (primary) {
+          const statusMap: Record<string, WAState["status"]> = {
+            CONNECTED: "connected", DISCONNECTED: "disconnected",
+            CONNECTING: "connecting", QR_READY: "qr_ready",
+            RECONNECTING: "reconnecting",
+          };
+          setWaState({
+            status:      (statusMap[primary.status] ?? "disconnected") as WAState["status"],
+            qrDataUrl:   primary.qrDataUrl,
+            phone:       primary.phone || null,
+            connectedAt: primary.connectedAt,
+            error:       null,
+          });
+        }
+      }
+    } catch { /* ignore */ }
+    setLoadingSessions(false);
+  }, []);
+
+  const handleAddSession = async () => {
+    if (!newSessionName.trim()) return;
+    setAddingSession(true);
+    try {
+      const res = await fetch("/api/wa-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newSessionName.trim(), dailyLimit: newSessionLimit }),
+      });
+      if (res.ok) {
+        const created = await res.json() as WaSession;
+        setShowAddModal(false);
+        setNewSessionName("");
+        setNewSessionLimit(200);
+        setQrSessionId(created.id);
+        await fetchSessions();
+        // Start polling QR for new session
+        if (sessionPollRef.current) clearInterval(sessionPollRef.current);
+        sessionPollRef.current = setInterval(() => void fetchSessions(), 3000);
+      }
+    } catch { /* ignore */ }
+    setAddingSession(false);
+  };
+
+  const handleSessionConnect = async (id: number) => {
+    setConnectingId(id);
+    try {
+      await fetch(`/api/wa-sessions/${id}/connect`, { method: "POST" });
+      setQrSessionId(id);
+      await fetchSessions();
+      if (sessionPollRef.current) clearInterval(sessionPollRef.current);
+      sessionPollRef.current = setInterval(() => void fetchSessions(), 3000);
+    } catch { /* ignore */ }
+    setConnectingId(null);
+  };
+
+  const handleSessionDisconnect = async (id: number) => {
+    if (!confirm("Logout dari session ini? Auth files akan dihapus.")) return;
+    setDisconnectingId(id);
+    try {
+      await fetch(`/api/wa-sessions/${id}/disconnect`, { method: "POST" });
+      await fetchSessions();
+    } catch { /* ignore */ }
+    setDisconnectingId(null);
+  };
+
+  const handleSessionDelete = async (id: number, name: string) => {
+    if (!confirm(`Hapus session "${name}"? Ini tidak dapat dibatalkan.`)) return;
+    setDeletingId(id);
+    try {
+      await fetch(`/api/wa-sessions/${id}`, { method: "DELETE" });
+      await fetchSessions();
+    } catch { /* ignore */ }
+    setDeletingId(null);
+  };
+
+  const handleSetDefault = async (id: number) => {
+    try {
+      await fetch(`/api/wa-sessions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      await fetchSessions();
+    } catch { /* ignore */ }
+  };
+
+  // Stop polling QR when all sessions connected
+  useEffect(() => {
+    const allConnected = sessions.every((s) =>
+      s.status === "CONNECTED" || s.status === "DISCONNECTED" || s.status === "BANNED" || s.status === "LIMITED"
+    );
+    if (allConnected && sessionPollRef.current) {
+      clearInterval(sessionPollRef.current);
+      sessionPollRef.current = null;
+    }
+  }, [sessions]);
+
   // ── Fetch WA status ────────────────────────────────────────────────────────
   const fetchWAStatus = useCallback(async () => {
     try {
@@ -175,7 +338,8 @@ export default function AutomationPage() {
     fetchWAStatus();
     fetchStats();
     fetchLogs(1);
-  }, [fetchWAStatus, fetchStats, fetchLogs]);
+    fetchSessions();
+  }, [fetchWAStatus, fetchStats, fetchLogs, fetchSessions]);
 
   // ── Poll WA status every 3 seconds when not connected ────────────────────
   useEffect(() => {
@@ -272,6 +436,192 @@ export default function AutomationPage() {
           ))}
         </div>
       )}
+
+      {/* ── Multi-Session WhatsApp Accounts ─────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+              <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              Connected WhatsApp Accounts
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {sessions.length} session terdaftar · Kelola sender untuk broadcast
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            Tambah Akun
+          </button>
+        </div>
+
+        <div className="p-5">
+          {loadingSessions && sessions.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-gray-400 text-sm">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              </svg>
+              Memuat sessions…
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+              </svg>
+              Belum ada session. Klik &quot;Tambah Akun&quot; untuk mulai.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {sessions.map((sess) => {
+                const meta      = sessionStatusMeta(sess.status);
+                const limitPct  = sess.dailyLimit > 0 ? Math.min(100, Math.round((sess.sentToday / sess.dailyLimit) * 100)) : 0;
+                const isConn    = connectingId    === sess.id;
+                const isDisconn = disconnectingId === sess.id;
+                const isDel     = deletingId      === sess.id;
+
+                return (
+                  <div key={sess.id} className="border border-gray-200 rounded-xl p-4 space-y-3 hover:border-gray-300 transition-colors relative">
+                    {/* Session 1 lock indicator */}
+                    {sess.id === 1 && (
+                      <div className="absolute top-3 right-3">
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Primary</span>
+                      </div>
+                    )}
+
+                    {/* Name + phone */}
+                    <div className="pr-16">
+                      <div className="font-medium text-gray-800 truncate">{sess.name}</div>
+                      {sess.phone ? (
+                        <div className="text-xs text-gray-400 mt-0.5">+{sess.phone}</div>
+                      ) : (
+                        <div className="text-xs text-gray-300 mt-0.5 italic">Nomor belum tersedia</div>
+                      )}
+                    </div>
+
+                    {/* Status + default badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${meta.badge} ${meta.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`}/>
+                        {meta.label}
+                      </span>
+                      {sess.isDefault && (
+                        <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">★ Default</span>
+                      )}
+                    </div>
+
+                    {/* QR Code — show when status is QR_READY and this is the active QR session */}
+                    {sess.status === "QR_READY" && sess.qrDataUrl && (qrSessionId === sess.id || sess.id === 1) && (
+                      <div className="flex flex-col items-center gap-2 p-3 bg-gray-50 rounded-xl">
+                        <p className="text-xs text-gray-500 text-center">
+                          WhatsApp → Perangkat Tertaut → Tautkan Perangkat
+                        </p>
+                        <div className="bg-white p-1.5 rounded-lg shadow-sm border border-gray-200">
+                          <Image
+                            src={sess.qrDataUrl}
+                            alt="WhatsApp QR Code"
+                            width={160}
+                            height={160}
+                            className="rounded"
+                            unoptimized
+                          />
+                        </div>
+                        <p className="text-xs text-blue-600 font-medium animate-pulse">Scan QR Code di atas</p>
+                      </div>
+                    )}
+
+                    {/* Health + daily usage */}
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-gray-400 mb-0.5">Health Score</div>
+                        <div className={`font-semibold ${healthColor(sess.healthScore)}`}>
+                          {sess.healthScore.toFixed(0)}% · {healthLabel(sess.healthScore)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-400 mb-0.5">Kirim Hari Ini</div>
+                        <div className="font-semibold text-gray-700">
+                          {sess.sentToday} <span className="font-normal text-gray-400">/ {sess.dailyLimit}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Daily limit progress bar */}
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${limitPct >= 90 ? "bg-red-400" : limitPct >= 70 ? "bg-amber-400" : "bg-emerald-400"}`}
+                        style={{ width: `${limitPct}%` }}
+                      />
+                    </div>
+
+                    {/* Success/fail mini stats */}
+                    <div className="flex gap-3 text-xs text-gray-400">
+                      <span>✓ {sess.successCount} sukses</span>
+                      <span>✗ {sess.failCount} gagal</span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 pt-0.5">
+                      {(sess.status === "DISCONNECTED" || sess.status === "BANNED") && (
+                        <button
+                          onClick={() => handleSessionConnect(sess.id)}
+                          disabled={isConn}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60 transition-colors flex items-center justify-center gap-1"
+                        >
+                          {isConn && (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                            </svg>
+                          )}
+                          {isConn ? "Menghubungkan…" : "Hubungkan"}
+                        </button>
+                      )}
+                      {(sess.status === "CONNECTED" || sess.status === "QR_READY" || sess.status === "CONNECTING" || sess.status === "RECONNECTING") && (
+                        <button
+                          onClick={() => handleSessionDisconnect(sess.id)}
+                          disabled={isDisconn}
+                          className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60 transition-colors"
+                        >
+                          {isDisconn ? "Logout…" : "Logout"}
+                        </button>
+                      )}
+                      {!sess.isDefault && sess.status === "CONNECTED" && (
+                        <button
+                          onClick={() => handleSetDefault(sess.id)}
+                          className="text-xs text-gray-400 hover:text-violet-700 border border-gray-200 hover:border-violet-300 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Jadikan default"
+                        >
+                          ★
+                        </button>
+                      )}
+                      {sess.id !== 1 && (
+                        <button
+                          onClick={() => handleSessionDelete(sess.id, sess.name)}
+                          disabled={isDel}
+                          className="text-xs text-gray-400 hover:text-red-600 border border-gray-200 hover:border-red-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                          title="Hapus session"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ── Left: WA Connection ──────────────────────────────────────── */}
@@ -561,6 +911,81 @@ export default function AutomationPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Add Session Modal ────────────────────────────────────────────────── */}
+      {showAddModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-gray-100 flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-800">Tambah Session WhatsApp</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Session baru akan minta scan QR</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Session</label>
+                <input
+                  type="text"
+                  value={newSessionName}
+                  onChange={(e) => setNewSessionName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddSession()}
+                  placeholder="contoh: Akun Marketing 2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Daily Limit
+                  <span className="text-xs text-gray-400 font-normal ml-1">(maks pesan per hari)</span>
+                </label>
+                <input
+                  type="number"
+                  value={newSessionLimit}
+                  onChange={(e) => setNewSessionLimit(Math.max(1, parseInt(e.target.value) || 200))}
+                  min={1}
+                  max={1000}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-400 mt-1">Rekomendasi: 100–200 untuk akun baru, 200–500 untuk akun lama</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => { setShowAddModal(false); setNewSessionName(""); setNewSessionLimit(200); }}
+                  className="flex-1 border border-gray-200 text-gray-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleAddSession}
+                  disabled={addingSession || !newSessionName.trim()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
+                >
+                  {addingSession && (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  )}
+                  {addingSession ? "Membuat…" : "Connect & Scan QR"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Log Detail Modal ─────────────────────────────────────────────────── */}
       {selectedLog && (
