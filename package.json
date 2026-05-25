@@ -9,6 +9,10 @@
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts"
   },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
