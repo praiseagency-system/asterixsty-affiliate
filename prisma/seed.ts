@@ -5,6 +5,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding master data...");
 
+  // Skip seed if master data already exists (idempotent — safe to run on every deploy)
+  const existingProductCount = await prisma.product.count();
+  if (existingProductCount > 0) {
+    console.log("✅ Data sudah ada, skip seed.");
+    return;
+  }
+
   await prisma.product.createMany({
     data: [
       { no: 1, nama: "Avalon 35ML", hpp: 16572 },
