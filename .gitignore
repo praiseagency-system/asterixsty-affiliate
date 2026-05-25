@@ -30,8 +30,24 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
+
+# SQLite database files (switched to PostgreSQL for production)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# WhatsApp session — contains auth keys, NEVER commit
+.wa-session/
+
+# Uploaded files — served via Railway Volume in production
+public/uploads/
+
+# Claude project settings
+.claude/
 
 # vercel
 .vercel
@@ -39,3 +55,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma

@@ -1,0 +1,540 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id           Int                    @id @default(autoincrement())
+  no           Int
+  nama         String
+  hpp          Float
+  productFocus CampaignProductFocus[]
+}
+
+model AffiliateSpecialist {
+  id        Int        @id @default(autoincrement())
+  no        Int
+  nama      String
+  deletedAt DateTime?                // soft-delete — keeps old campaign PIC references intact
+  campaigns Campaign[]
+}
+
+model KategoriAffiliate {
+  id        Int    @id @default(autoincrement())
+  no        Int
+  nama      String
+  deskripsi String @default("")
+}
+
+model HookFormula {
+  id       Int    @id @default(autoincrement())
+  formula  String
+  deskripsi String
+  detail   String
+}
+
+model ListingAffiliate {
+  id                Int       @id @default(autoincrement())
+  bulanListing      String?
+  tanggalListing    DateTime?
+  usernameTiktok    String
+  linkTiktok        String    @default("")
+  followers         Int       @default(0)
+  mediaPromosiFocus String    @default("")
+  kategoriAffiliate String    @default("")
+  gmvPer30Hari      Float     @default(0)
+  qtyProdukTerjual  Float     @default(0)
+  rataRataViews     Float     @default(0)
+  kejelasanGambar   String    @default("")
+  visualisasiProduk String    @default("")
+  audioSuara        String    @default("")
+  jenisVisualTake   String    @default("")
+  qtyVideoPerProduk Float     @default(0)
+  skorGmv           Float     @default(0)
+  skorQtyTerjual    Float     @default(0)
+  skorViews         Float     @default(0)
+  skorKualitas      Float     @default(0)
+  overallResult     Float     @default(0)
+  worthIt           String    @default("")
+  sampleDecision    String    @default("")
+  approvalSample    Boolean   @default(false)
+  lanjutKirimSample String    @default("") // YES / NO / HOLD (legacy, kept for import compat)
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+}
+
+model DatabaseAffiliate {
+  id                  Int       @id @default(autoincrement())
+  tahun               String    @default("")
+  tanggalKirimSample  DateTime?
+  status              String    @default("Aktif")
+  idAffiliate         String    @default("")
+  namaAffiliator      String    @default("")
+  tiktokUsername      String
+  followers           Int       @default(0)
+  mediaPromosiFocus   String    @default("")
+  visualTake          String    @default("")
+  kategoriAffiliate   String    @default("")
+  affiliateSpecialist String    @default("")
+  alamat              String    @default("")
+  kota                String    @default("")
+  provinsi            String    @default("")
+  noWhatsapp          String    @default("")
+  samplePertama       String    @default("")
+  sampleKedua         String    @default("")
+  sampleKetiga        String    @default("")
+  sampleKeempat       String    @default("")
+  sampleKelima        String    @default("")
+  totalVideoDiDeliver Int       @default(0)
+  videoCeklis         String    @default("[]")
+  groups              String    @default("[]")    // JSON array of group names
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model AffiliateGroup {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  color     String   @default("indigo")
+  createdAt DateTime @default(now())
+}
+
+model BroadcastPreset {
+  id         Int      @id @default(autoincrement())
+  name       String
+  targetJson String   @default("{}")
+  createdAt  DateTime @default(now())
+}
+
+model RecruitmentBroadcast {
+  id           Int       @id @default(autoincrement())
+  name         String    @default("")
+  message      String    @default("")
+  variations   String    @default("[]")
+  targetJson   String    @default("{}")
+  delayMode    String    @default("Normal")
+  senderNumber String    @default("")
+  totalQueued  Int       @default(0)
+  totalSent    Int       @default(0)
+  totalFailed  Int       @default(0)
+  status       String    @default("draft")
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  queueItems   WaMessageQueue[]
+}
+
+model WaMessageQueue {
+  id             Int       @id @default(autoincrement())
+  broadcastId    Int?
+  broadcast      RecruitmentBroadcast? @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  phone          String
+  message        String
+  recipientName  String    @default("")
+  tiktokUsername String    @default("")
+  campaignId     Int?
+  campaignName   String    @default("")
+  delayMode      String    @default("Normal")
+  status         String    @default("pending")   // pending | processing | success | failed | retry
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  errorReason    String    @default("")
+  sentAt         DateTime?
+  scheduledAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model DataMingguan {
+  id                       Int      @id @default(autoincrement())
+  periode                  DateTime
+  creatorUsername          String
+  affiliateGmv             Float    @default(0)
+  affiliateLiveGmv         Float    @default(0)
+  affiliateVideoGmv        Float    @default(0)
+  affiliateProductCardGmv  Float    @default(0)
+  affiliateProductsSold    Int      @default(0)
+  itemsSold                Int      @default(0)
+  estCommission            Float    @default(0)
+  avgOrderValue            Float    @default(0)
+  affiliateOrders          Int      @default(0)
+  ctr                      Float    @default(0)
+  productImpressions       Int      @default(0)
+  affiliateLiveStreams      Int      @default(0)
+  affiliateShoppableVideos Int      @default(0)
+  openCollabGmv            Float    @default(0)
+  affiliateRefundedGmv     Float    @default(0)
+  affiliateItemsRefunded   Int      @default(0)
+  affiliateFollowers       Int      @default(0)
+  createdAt                DateTime @default(now())
+}
+
+model DataBulanan {
+  id                       Int      @id @default(autoincrement())
+  periode                  DateTime
+  creatorUsername          String
+  affiliateGmv             Float    @default(0)
+  affiliateLiveGmv         Float    @default(0)
+  affiliateVideoGmv        Float    @default(0)
+  affiliateProductCardGmv  Float    @default(0)
+  affiliateProductsSold    Int      @default(0)
+  itemsSold                Int      @default(0)
+  estCommission            Float    @default(0)
+  avgOrderValue            Float    @default(0)
+  affiliateOrders          Int      @default(0)
+  ctr                      Float    @default(0)
+  productImpressions       Int      @default(0)
+  affiliateLiveStreams      Int      @default(0)
+  affiliateShoppableVideos Int      @default(0)
+  openCollabGmv            Float    @default(0)
+  affiliateRefundedGmv     Float    @default(0)
+  affiliateItemsRefunded   Int      @default(0)
+  affiliateFollowers       Int      @default(0)
+  createdAt                DateTime @default(now())
+}
+
+model TieredProgram {
+  id             Int      @id @default(autoincrement())
+  tiktokUsername String
+  program        String   @default("")
+  bulan          String
+  tahun          Int
+  target         Float    @default(0)
+  gmvAktual      Float    @default(0)
+  status         String   @default("—")
+  linkSurat      String   @default("")
+  pic            String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AffiliateProgram {
+  id                 Int       @id @default(autoincrement())
+  tiktokUsername     String
+  namaAffiliator     String    @default("")
+  namaProgram        String    @default("")
+  periodeTipe        String    @default("Bulanan") // Mingguan | Bulanan | Custom
+  startDate          DateTime
+  endDate            DateTime
+  targetGmv          Float     @default(0)
+  targetVideo        Int       @default(0)
+  targetLive         Int       @default(0)
+  targetOrders       Int       @default(0)
+  benefitKomisi      String    @default("")
+  benefitCash        Float     @default(0)
+  benefitBestSeller  Boolean   @default(false)
+  benefitBonusProduk String    @default("")
+  benefitExclusive   Boolean   @default(false)
+  pic                String    @default("")
+  catatan            String    @default("")
+  manualStatus        String    @default("")        // UPCOMING | ONGOING | ACHIEVED | FAILED | EXPIRED | "" (auto)
+  updateLog           String    @default("[]")      // JSON: [{date, changes:[{label,from,to}]}]
+  agreementFilename   String    @default("")
+  agreementPath       String    @default("")
+  agreementSize       Int       @default(0)
+  agreementUploadedAt DateTime?
+  agreementStatus     String    @default("Belum Upload") // Belum Upload | Uploaded | Signed
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model SampleDelivery {
+  id               Int      @id @default(autoincrement())
+  affiliateUsername String  // FK to DatabaseAffiliate.tiktokUsername
+  tanggalKirim     DateTime @default(now())
+  produk           String   @default("")
+  qtyProduk        Int      @default(1)
+  totalVideoTarget Int      @default(0)
+  videoCeklis      String   @default("[]") // JSON [{label, done}]
+  totalVideoDone   Int      @default(0)
+  statusProgress   String   @default("Belum Mulai")
+  catatan          String   @default("")
+  googleFormLink   String   @default("") // Personalized prefilled Google Form link
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model GoogleIntegration {
+  id                    Int       @id @default(autoincrement())
+  brandId               String    @default("default") @unique
+  // OAuth Credentials (entered by admin via UI)
+  clientId              String    @default("")
+  encryptedClientSecret String    @default("")   // AES-256-GCM encrypted
+  // OAuth Tokens (encrypted at rest)
+  encryptedAccessToken  String    @default("")
+  encryptedRefreshToken String    @default("")
+  tokenExpiry           DateTime?
+  // Connection status
+  connectedEmail        String    @default("")
+  status                String    @default("disconnected") // disconnected|connected|expired|error
+  connectedAt           DateTime?
+  // Master Google Form (auto-created via Forms API)
+  googleFormId          String    @default("")   // Forms API editing ID
+  googleFormPublicId    String    @default("")   // e/1FAIpQLSe... for viewform URL
+  googleFormTitle       String    @default("")
+  // Form question entry IDs for prefilled links (JSON object)
+  // Keys: deliveryId, username, produk, videoKe, tiktokLink, sparkCode
+  formEntryIds          String    @default("{}")
+  // Question IDs from Forms API (JSON) — for reading responses
+  formQuestionIds       String    @default("{}")
+  // Linked spreadsheet (for human review; sync uses Forms API)
+  googleSheetId         String    @default("")
+  googleSheetName       String    @default("Form Responses 1")
+  // Sync state
+  lastSyncAt            DateTime?
+  nextPageToken         String    @default("")   // Forms API pagination
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model VideoReferensi {
+  id               Int      @id @default(autoincrement())
+  usernameTiktok   String
+  linkTiktok       String   @default("")
+  linkVideo        String   @default("")   // original TikTok video URL
+  videoPath        String   @default("")   // local file path (served from /uploads)
+  videoFilename    String   @default("")
+  caption          String   @default("")
+  hook             String   @default("")
+  jenisVisualTake  String   @default("")
+  mediaFocus       String   @default("")
+  kategori         String   @default("")
+  tags             String   @default("[]") // JSON string[]
+  gmv              Float    @default(0)
+  totalOrders      Int      @default(0)
+  views            Int      @default(0)
+  likes            Int      @default(0)
+  comments         Int      @default(0)
+  shares           Int      @default(0)
+  analisis         String   @default("")   // kenapa berhasil
+  kelebihan        String   @default("")
+  patternContent   String   @default("")
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TierConfig {
+  id      Int    @id @default(autoincrement())
+  tier    String // A, B, C
+  label   String // Elite, Growth, Entry
+  minGmv  Float  @default(0)
+  color   String @default("")
+}
+
+model ScoreConfig {
+  id        Int    @id @default(autoincrement())
+  komponen  String // gmv, qty, views, kualitas
+  level     Int    // 0, 1, 2, 3
+  minValue  Float  @default(0)
+  label     String @default("")
+}
+
+model ReminderTemplate {
+  id           Int      @id @default(autoincrement())
+  nama         String
+  tipeReminder String   // Reminder Pengiriman | Reminder Video 1 | Reminder Video 2 | Reminder Video 3 | Reminder Terlambat | Final Warning
+  isiPesan     String
+  aktif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AppConfig {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
+
+model ReminderLog {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  deliveryId   Int?
+  username     String
+  tipeReminder String
+  status       String   @default("pending") // sent | failed | skipped
+  phone        String   @default("")
+  pesan        String   @default("")
+  errorMsg     String   @default("")
+  pic          String   @default("")
+}
+
+model VideoSubmission {
+  id                Int      @id @default(autoincrement())
+  sampleDeliveryId  Int
+  affiliateUsername String
+  videoNumber       Int      // 1, 2, 3
+  tiktokLink        String   @default("")
+  sparkCode         String   @default("")
+  notes             String   @default("")
+  submittedAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([sampleDeliveryId, videoNumber])
+}
+
+// ── Program Center ────────────────────────────────────────────────────────────
+
+model Campaign {
+  id                  Int                  @id @default(autoincrement())
+  nama                String
+  slug                String               @default("")
+  objectives          String               @default("[]")  // JSON string[]
+  deskripsi           String               @default("")
+  bannerPath          String               @default("")
+  // Draft | Ready | Published | Ongoing | Ended
+  status              String               @default("Draft")
+  // Public | Invite Only | Specialist Only
+  visibility          String               @default("Public")
+  affiliateCategories String               @default("[]")  // JSON string[]
+  visualTake          String               @default("[]")  // JSON string[]
+  startDate           DateTime?
+  endDate             DateTime?
+  rewardConfig        String               @default("{}")  // JSON RewardConfig
+  rewardDeskripsi     String               @default("")
+  maxParticipants     Int                  @default(0)     // 0 = unlimited
+  picSpecialistId     Int?
+  catatan             String               @default("")
+  isTemplate          Boolean              @default(false)
+  // Join & Approval
+  approvalMode        String               @default("Auto")  // Auto | Manual
+  joinSlug            String               @default("")      // unique slug for public join URL
+  // Automation config (JSON)
+  automationConfig    String               @default("{}")
+  deletedAt           DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  picSpecialist       AffiliateSpecialist?  @relation(fields: [picSpecialistId], references: [id])
+  participants        CampaignParticipant[]
+  rewardDistributions RewardDistribution[]
+  broadcastLogs       BroadcastLog[]
+  productFocus        CampaignProductFocus[]
+  campaignForm        CampaignForm?
+}
+
+// ── Campaign Google Forms ──────────────────────────────────────────────────────
+
+model CampaignForm {
+  id                Int       @id @default(autoincrement())
+  campaignId        Int       @unique
+  // Registration Form (for affiliates to join campaign)
+  regFormId         String    @default("")
+  regFormPublicId   String    @default("")
+  regEntryIds       String    @default("{}")
+  regQuestionIds    String    @default("{}")
+  lastRegSyncAt     DateTime?
+  regNextPageToken  String    @default("")
+  // Submission Form (for participants to submit video reports)
+  subFormId         String    @default("")
+  subFormPublicId   String    @default("")
+  subEntryIds       String    @default("{}")
+  subQuestionIds    String    @default("{}")
+  lastSubSyncAt     DateTime?
+  subNextPageToken  String    @default("")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  campaign          Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  registrations     CampaignRegistration[]
+}
+
+model CampaignRegistration {
+  id                Int       @id @default(autoincrement())
+  responseId        String    @unique               // Forms API responseId (idempotency)
+  campaignFormId    Int
+  campaignId        Int
+  nama              String    @default("")
+  usernameTiktok    String    @default("")
+  noWhatsapp        String    @default("")
+  alamat            String    @default("")
+  kategoriAffiliate String    @default("")
+  visualTake        String    @default("")
+  linkPortfolio     String    @default("")
+  catatan           String    @default("")
+  // pending | approved | rejected | auto_approved
+  status            String    @default("pending")
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  campaignForm      CampaignForm @relation(fields: [campaignFormId], references: [id], onDelete: Cascade)
+}
+
+model CampaignProductFocus {
+  id         Int      @id @default(autoincrement())
+  campaignId Int
+  productId  Int
+  createdAt  DateTime @default(now())
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  product    Product  @relation(fields: [productId],  references: [id])
+
+  @@unique([campaignId, productId])
+}
+
+model CampaignParticipant {
+  id             Int      @id @default(autoincrement())
+  campaignId     Int
+  tiktokUsername String
+  namaAffiliate  String   @default("")
+  whatsapp       String   @default("")
+  category       String   @default("")
+  specialist     String   @default("")
+  visualTake     String   @default("")
+  joinedAt       DateTime @default(now())
+  // Pending | Approved | Active | Completed | Rejected
+  status         String   @default("Pending")
+  videoCount     Int       @default(0)
+  views          Int       @default(0)
+  gmvContributed Float     @default(0)
+  lastVideoAt    DateTime?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, tiktokUsername])
+}
+
+model RewardDistribution {
+  id             Int       @id @default(autoincrement())
+  campaignId     Int
+  tiktokUsername String
+  namaAffiliate  String    @default("")
+  rewardType     String    @default("")  // leaderboard | consistency | milestone | fixed
+  rewardLabel    String    @default("")  // "Juara 1", "Milestone 1", etc.
+  amount         Float     @default(0)
+  // Pending | Approved | Paid | Rejected
+  status         String    @default("Pending")
+  paidAt         DateTime?
+  notes          String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model BroadcastLog {
+  id          Int       @id @default(autoincrement())
+  campaignId  Int
+  message     String
+  targetType  String    @default("All")  // All | Active | BelumUpload | TopCreator | Manual
+  totalSent   Int       @default(0)
+  // pending | sending | done | failed
+  status      String    @default("pending")
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
