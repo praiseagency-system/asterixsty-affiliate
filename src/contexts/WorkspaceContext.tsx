@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  createContext, useContext, useEffect, useState, useCallback,
+  createContext, useContext, useEffect, useRef, useState, useCallback,
   type ReactNode,
 } from "react";
 
@@ -74,14 +74,20 @@ export function WorkspaceProvider({
 
   const current = workspaces.find((w) => w.id === currentId) ?? workspaces[0] ?? null;
 
-  // ── Global fetch interceptor ────────────────────────────────────────────────
-  // Automatically injects X-Workspace-ID on every /api/ request so all pages
-  // benefit without needing individual wsFetch() calls.
-  useEffect(() => {
-    if (typeof window === "undefined" || !current?.id) return;
-    const wsId = current.id;
+  // ── Ref keeps the active workspace ID current without stale-closure issues ──
+  // Updated synchronously during every render, so the interceptor below always
+  // reads the right value even on the first fetch after a workspace switch.
+  const wsIdRef = useRef<number | null>(null);
+  wsIdRef.current = current?.id ?? null;
 
-    // Walk any existing patch chain to find the real native fetch
+  // ── Global fetch interceptor — installed once on mount ────────────────────
+  // All /api/ calls get X-Workspace-ID injected from the ref above, so every
+  // page component re-fetches data for the correct workspace after a switch
+  // without needing individual wsFetch() changes.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Walk any existing patch chain to reach the true native fetch
     let native: typeof window.fetch = window.fetch;
     while ((native as { __ws_native__?: typeof fetch }).__ws_native__) {
       native = (native as { __ws_native__?: typeof fetch }).__ws_native__!;
@@ -95,7 +101,8 @@ export function WorkspaceProvider({
         typeof input === "string" ? input :
         input instanceof URL      ? input.href :
         (input as Request).url;
-      if (url.startsWith("/api/")) {
+      const wsId = wsIdRef.current;
+      if (url.startsWith("/api/") && wsId) {
         const headers = new Headers(init?.headers);
         if (!headers.has("x-workspace-id"))
           headers.set("x-workspace-id", String(wsId));
@@ -107,7 +114,7 @@ export function WorkspaceProvider({
     (patched as { __ws_native__?: typeof fetch }).__ws_native__ = native;
     window.fetch = patched;
     return () => { window.fetch = native; };
-  }, [current?.id]);
+  }, []); // ← intentionally empty: install once, ref keeps value fresh
 
   /** Fetch wrapper that injects X-Workspace-ID so API routes can guard by workspace */
   function wsFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {

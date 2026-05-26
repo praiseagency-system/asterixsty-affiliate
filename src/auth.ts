@@ -32,10 +32,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!user.id || !user.email) return;
 
       // ── Accept pending workspace invitations for this email ────────────────
+      // Pending invites now use a unique placeholder userId ("invite_<uuid>")
+      // to avoid the @@unique([workspaceId, userId]) constraint firing when
+      // multiple people are invited to the same workspace. We match on
+      // inviteEmail + status only (not userId = "") so all are picked up.
       await prisma.workspaceMember.updateMany({
         where: {
           inviteEmail: user.email,
-          userId:      "",
           status:      "invited",
         },
         data: { userId: user.id, status: "active" },

@@ -68,86 +68,192 @@ function Avatar({ name, image, size = "md" }: { name: string; image?: string | n
 
 // ─── Invite modal ─────────────────────────────────────────────────────────────
 function InviteModal({
-  workspaceId,
+  currentWorkspaceId,
   onClose,
   onDone,
 }: {
-  workspaceId: number;
+  currentWorkspaceId: number;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [email, setEmail]   = useState("");
-  const [role,  setRole]    = useState<Role>("VIEWER");
-  const [busy,  setBusy]    = useState(false);
-  const [error, setError]   = useState("");
+  const { workspaces } = useWorkspace();
+
+  // Only show workspaces where the current user can manage members
+  const manageableWs = workspaces.filter((w) => w.role === "OWNER" || w.role === "ADMIN");
+
+  const [email,        setEmail]        = useState("");
+  const [role,         setRole]         = useState<Role>("VIEWER");
+  const [selectedWsIds, setSelectedWsIds] = useState<Set<number>>(new Set([currentWorkspaceId]));
+  const [busy,         setBusy]         = useState(false);
+  const [error,        setError]        = useState("");
+
+  function toggleWs(id: number) {
+    setSelectedWsIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (selectedWsIds.size === 0) { setError("Select at least one workspace."); return; }
     setBusy(true); setError("");
     try {
       const res = await fetch("/api/workspace/members", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          workspaceIds: [...selectedWsIds],
+        }),
       });
+      const data = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setError(d.error || "Failed to invite member");
+        setError(data.error || "Failed to invite member");
       } else {
         onDone();
       }
     } catch {
-      setError("Network error");
+      setError("Network error. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Invite Member</h2>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Invite Member</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Invite via email — they&apos;ll get access when they sign in</p>
+          </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
+
         <form onSubmit={submit} className="px-6 py-5 space-y-4">
+          {/* Email */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Email address</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Email address <span className="text-red-400">*</span>
+            </label>
             <input
               type="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
               placeholder="colleague@example.com"
+              autoFocus
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-colors"
             />
           </div>
+
+          {/* Role */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Role</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Role</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 bg-white transition-colors"
             >
-              {ROLES.map((r) => (
+              {ROLES.filter((r) => r !== "OWNER").map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
             <p className="mt-1.5 text-xs text-gray-400">{ROLE_DESCRIPTIONS[role]}</p>
           </div>
+
+          {/* Workspace Access */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">
+              Workspace Access
+              <span className="ml-1.5 text-gray-400 font-normal">(select one or more)</span>
+            </label>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {manageableWs.map((ws) => {
+                const checked = selectedWsIds.has(ws.id);
+                const isCurrent = ws.id === currentWorkspaceId;
+                return (
+                  <label
+                    key={ws.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
+                      checked
+                        ? "border-indigo-200 bg-indigo-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleWs(ws.id)}
+                      className="w-4 h-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-300"
+                    />
+                    {/* Workspace avatar */}
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-white text-[10px] font-bold"
+                      style={{ background: ws.logoUrl ? undefined : "#6366f1" }}
+                    >
+                      {ws.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-gray-800 truncate block">{ws.name}</span>
+                    </div>
+                    {isCurrent && (
+                      <span className="text-[10px] text-indigo-500 font-semibold shrink-0">Current</span>
+                    )}
+                  </label>
+                );
+              })}
+              {manageableWs.length === 0 && (
+                <p className="text-xs text-gray-400 py-2 text-center">No workspaces available</p>
+              )}
+            </div>
+            {selectedWsIds.size === 0 && (
+              <p className="text-xs text-amber-500 mt-1.5">Select at least one workspace</p>
+            )}
+          </div>
+
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={busy}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+              disabled={busy || selectedWsIds.size === 0 || !email.trim()}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {busy ? "Inviting…" : "Send Invite"}
+              {busy ? (
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Inviting…
+                </span>
+              ) : `Invite to ${selectedWsIds.size} workspace${selectedWsIds.size > 1 ? "s" : ""}`}
             </button>
           </div>
         </form>
@@ -436,7 +542,7 @@ export default function TeamPage() {
       {/* ── Invite modal ── */}
       {inviting && (
         <InviteModal
-          workspaceId={current.id}
+          currentWorkspaceId={current.id}
           onClose={() => setInviting(false)}
           onDone={() => { setInviting(false); loadMembers(); }}
         />

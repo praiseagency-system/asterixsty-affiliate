@@ -2,12 +2,15 @@
 
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 // Routes that should render without the app shell (no sidebar)
 const SHELL_LESS_ROUTES = ["/login"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname  = usePathname();
+  const { current } = useWorkspace();
+
   const isShellLess = SHELL_LESS_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(r + "/"),
   );
@@ -20,7 +23,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-full">
       <Sidebar />
       <main className="flex-1 overflow-auto">
-        <div className="p-6 max-w-screen-2xl mx-auto">{children}</div>
+        {/*
+          key={current?.id} forces every page component to unmount + remount
+          whenever the active workspace changes, so all useEffect(() => fetchData(), [])
+          hooks re-run automatically — no manual refresh needed.
+        */}
+        <div key={current?.id ?? 0} className="p-6 max-w-screen-2xl mx-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
