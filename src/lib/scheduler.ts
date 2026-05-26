@@ -8,7 +8,6 @@
  */
 import cron from "node-cron";
 import { runReminderEngine } from "@/lib/reminder-engine";
-import { processWaQueue } from "@/lib/wa-queue-processor";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -33,25 +32,30 @@ export function initScheduler() {
     }
   });
 
-  // WA Broadcast Queue — every 2 minutes, process up to 3 messages per tick.
-  // SKIPPED when the background worker is active (prevents duplicate sends).
+  // WA Queue Watchdog — every 2 minutes.
+  // Does NOT process items directly (that causes parallel sends with no delay).
+  // Instead: checks if pending items exist and auto-starts the background worker.
+  // The worker handles one-at-a-time delivery with proper random delays.
   cron.schedule("*/2 * * * *", async () => {
     try {
-      // ── Guard: yield to background worker ─────────────────────────────────
-      const { getWorkerState } = await import("@/lib/wa-queue-worker");
-      if (getWorkerState().active) {
-        // Background worker is running — it owns the queue. Don't touch it.
-        return;
-      }
+      const { getWorkerState, startWorker } = await import("@/lib/wa-queue-worker");
+      if (getWorkerState().active) return; // Worker is already running — nothing to do
 
-      const result = await processWaQueue(3, false);
-      if (result.processed > 0) {
-        console.log(
-          `[Scheduler] WA Queue: processed=${result.processed} success=${result.success} failed=${result.failed} remaining=${result.remaining}`
-        );
+      const { getPrisma } = await import("@/lib/prisma");
+      const prisma        = getPrisma();
+      const pendingCount  = await prisma.waMessageQueue.count({
+        where: {
+          status: { in: ["pending", "retry"] },
+          OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+        },
+      });
+
+      if (pendingCount > 0) {
+        console.log(`[Scheduler] Watchdog: ${pendingCount} pending item(s) — auto-starting worker`);
+        startWorker(); // Worker processes sequentially with real inter-message delay
       }
     } catch (err) {
-      console.error("[Scheduler] Error processing WA queue:", err);
+      console.error("[Scheduler] Queue watchdog error:", err);
     }
   });
 

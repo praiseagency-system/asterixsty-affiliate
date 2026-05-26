@@ -134,11 +134,24 @@ export async function POST(req: Request) {
             rewardDeskripsi: true,
             joinSlug:        true,
             picSpecialist:   { select: { nama: true } },
+            // Google Form URLs live in the related CampaignForm record
+            campaignForm: { select: { regFormPublicId: true, subFormPublicId: true } },
           },
         });
         if (campaign) {
-          const baseUrl          = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-          const joinLink         = campaign.joinSlug ? `${baseUrl}/join/${campaign.joinSlug}` : baseUrl;
+          const GFORM           = "https://docs.google.com/forms/d/e";
+          const regPublicId     = campaign.campaignForm?.regFormPublicId?.trim();
+          const subPublicId     = campaign.campaignForm?.subFormPublicId?.trim();
+          const baseUrl         = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+          // Prefer the campaign's Google Registration Form; fallback to internal join slug
+          const joinLink        = regPublicId
+            ? `${GFORM}/${regPublicId}/viewform`
+            : campaign.joinSlug ? `${baseUrl}/join/${campaign.joinSlug}` : baseUrl;
+
+          // Submission form URL (Google Form only — no internal fallback for submissions)
+          const submissionLink  = subPublicId ? `${GFORM}/${subPublicId}/viewform` : "";
+
           const rewardSection    = buildRewardSection(rewardDisplayMode, campaign.rewardConfig, campaign.rewardDeskripsi ?? "", customRewardText);
           const campaignDuration = buildCampaignDuration(durationFormat, campaign.startDate, campaign.endDate);
           const picName          = campaign.picSpecialist?.nama ?? "";
@@ -148,6 +161,7 @@ export async function POST(req: Request) {
             reward_section:     rewardSection,
             campaign_duration:  campaignDuration,
             join_link:          joinLink,
+            submission_link:    submissionLink,
             pic_name:           picName,
             // backward-compat aliases
             reward:             rewardSection,

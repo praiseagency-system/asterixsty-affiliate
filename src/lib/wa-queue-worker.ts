@@ -368,6 +368,21 @@ async function workerLoop(broadcastId: number | null): Promise<void> {
       continue;
     }
 
+    // ── Humanized pre-send jitter (1–3 s typing/reading pause) ───────────────
+    // Makes the delivery pattern non-robotic. Skips if stop was requested.
+    {
+      const jitterMs = 1_000 + Math.random() * 2_000;
+      const ok = await interruptibleSleep(jitterMs, () => w.stopRequested);
+      if (!ok) {
+        // Undo "processing" claim before exiting
+        await prisma.waMessageQueue.updateMany({
+          where: { id: item.id, status: "processing" },
+          data:  { status: "retry" },
+        }).catch(() => { /* ignore */ });
+        break;
+      }
+    }
+
     // ── Send message ─────────────────────────────────────────────────────────
     let sendResult: { ok: boolean; error?: string } = { ok: false, error: "Tidak ada sesi" };
     let usedSessionId: number | null = item.senderSessionId ?? null;

@@ -29,6 +29,7 @@ interface CampaignSource {
   rewardConfig?:    string;
   rewardDeskripsi?: string;
   picSpecialist?:   { id: number; nama: string } | null;
+  campaignForm?:    { regFormPublicId: string; subFormPublicId: string } | null;
 }
 type RewardDisplayMode = "Auto Summary" | "Prize Pool" | "Detail Reward" | "Custom Text" | "Hide Reward";
 type DurationFormat    = "Date Range" | "Total Days";
@@ -99,7 +100,8 @@ const SMART_VARS = [
   { key: "{campaign_name}",     label: "Nama Campaign"   },
   { key: "{reward_section}",    label: "Reward Section"  },
   { key: "{campaign_duration}", label: "Durasi Campaign" },
-  { key: "{join_link}",         label: "Link Join"       },
+  { key: "{join_link}",         label: "Link Daftar"     },
+  { key: "{submission_link}",   label: "Link Submit"     },
   { key: "{pic_name}",          label: "Nama PIC"        },
 ];
 
@@ -231,6 +233,7 @@ interface PreviewVars {
   reward_section?:    string;
   campaign_duration?: string;
   join_link?:         string;
+  submission_link?:   string;
   pic_name?:          string;
   campaign_name?:     string;
 }
@@ -247,7 +250,8 @@ function resolvePreview(
     .replace(/{campaign_name}/g,     cv.campaign_name     || "[Nama Campaign]")
     .replace(/{reward_section}/g,    cv.reward_section    || "[Reward Section]")
     .replace(/{campaign_duration}/g, cv.campaign_duration || "[Durasi Campaign]")
-    .replace(/{join_link}/g,         cv.join_link         || "[Link Join]")
+    .replace(/{join_link}/g,         cv.join_link         || "[Link Daftar]")
+    .replace(/{submission_link}/g,   cv.submission_link   || "[Link Submit]")
     .replace(/{pic_name}/g,          cv.pic_name          || "[Nama PIC]")
     // backward-compat
     .replace(/{deadline}/g, cv.campaign_duration || "[Deadline]")
@@ -805,7 +809,9 @@ Yuk gas upload konten terbaik kamu 🚀"
               <p className="font-semibold text-gray-500 mb-1">Variable Preview</p>
               {campaignVars.reward_section    && <p><span className="font-mono text-indigo-500">{"{reward_section}"}</span> → {campaignVars.reward_section.split("\n")[0]}{campaignVars.reward_section.includes("\n") ? "…" : ""}</p>}
               {campaignVars.campaign_duration && <p><span className="font-mono text-indigo-500">{"{campaign_duration}"}</span> → {campaignVars.campaign_duration}</p>}
-              {campaignVars.join_link         && <p><span className="font-mono text-indigo-500">{"{join_link}"}</span> → {campaignVars.join_link}</p>}
+              {campaignVars.join_link         && <p><span className="font-mono text-indigo-500">{"{join_link}"}</span> → <span className="break-all">{campaignVars.join_link}</span></p>}
+              {campaignVars.submission_link   && <p><span className="font-mono text-indigo-500">{"{submission_link}"}</span> → <span className="break-all">{campaignVars.submission_link}</span></p>}
+              {!campaignVars.join_link        && <p className="text-amber-500 text-[10px]">⚠️ Registration Form belum dibuat untuk campaign ini</p>}
               {campaignVars.pic_name          && <p><span className="font-mono text-indigo-500">{"{pic_name}"}</span> → {campaignVars.pic_name}</p>}
             </div>
           )}
@@ -1447,13 +1453,23 @@ function BroadcastPageInner() {
             setMessage={setMessage}
             variations={variations}
             setVariations={setVariations}
-            campaignVars={campaignSource ? {
-              campaign_name:     campaignSource.nama,
-              reward_section:    generateRewardSection(rewardDisplayMode, campaignSource.rewardConfig, campaignSource.rewardDeskripsi, customRewardText),
-              campaign_duration: generateDuration(durationFormat, campaignSource.startDate, campaignSource.endDate),
-              join_link:         campaignSource.joinSlug ? `${typeof window !== "undefined" ? window.location.origin : ""}/join/${campaignSource.joinSlug}` : "",
-              pic_name:          campaignSource.picSpecialist?.nama || "",
-            } : undefined}
+            campaignVars={campaignSource ? (() => {
+              const GFORM    = "https://docs.google.com/forms/d/e";
+              const regId    = campaignSource.campaignForm?.regFormPublicId?.trim();
+              const subId    = campaignSource.campaignForm?.subFormPublicId?.trim();
+              const origin   = typeof window !== "undefined" ? window.location.origin : "";
+              const joinLink = regId
+                ? `${GFORM}/${regId}/viewform`
+                : campaignSource.joinSlug ? `${origin}/join/${campaignSource.joinSlug}` : "";
+              return {
+                campaign_name:     campaignSource.nama,
+                reward_section:    generateRewardSection(rewardDisplayMode, campaignSource.rewardConfig, campaignSource.rewardDeskripsi, customRewardText),
+                campaign_duration: generateDuration(durationFormat, campaignSource.startDate, campaignSource.endDate),
+                join_link:         joinLink,
+                submission_link:   subId ? `${GFORM}/${subId}/viewform` : "",
+                pic_name:          campaignSource.picSpecialist?.nama || "",
+              };
+            })() : undefined}
           />
         </div>
       </div>

@@ -26,6 +26,8 @@ export async function GET(_req: Request, { params }: Params) {
       picSpecialist: picSelect,
       participants:  { orderBy: { videoCount: "desc" } },
       productFocus:  productFocusInclude,
+      // Include form IDs so broadcast preview can resolve real Google Form URLs
+      campaignForm:  { select: { regFormPublicId: true, subFormPublicId: true } },
     },
   });
   if (!campaign || campaign.deletedAt) {
