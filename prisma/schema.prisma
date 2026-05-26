@@ -8,6 +8,107 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Auth.js v5 (NextAuth) ─────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  globalRole    String    @default("MEMBER") // OWNER | MEMBER
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  ownedAgencies Agency[]
+  waSessions    WhatsappSession[] @relation("SessionOwner")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ── Agency & Workspace ────────────────────────────────────────────────────────
+
+model Agency {
+  id          Int         @id @default(autoincrement())
+  name        String
+  logoUrl     String      @default("")
+  ownerId     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  owner       User        @relation(fields: [ownerId], references: [id])
+  workspaces  Workspace[]
+}
+
+model Workspace {
+  id          Int       @id @default(autoincrement())
+  agencyId    Int
+  name        String
+  slug        String    @unique @default("")
+  logoUrl     String    @default("")
+  theme       String    @default("{}") // JSON: { primaryColor, accentColor }
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  agency      Agency    @relation(fields: [agencyId], references: [id])
+  members     WorkspaceMember[]
+}
+
+model WorkspaceMember {
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  userId        String    @default("") // filled on first login if invited by email
+  inviteEmail   String    @default("") // email used to invite (before they sign up)
+  role          String    @default("VIEWER") // OWNER | ADMIN | SPECIALIST | OPERATIONS | VIEWER
+  status        String    @default("active")  // active | invited | disabled
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User?     @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+}
+
 model Product {
   id           Int                    @id @default(autoincrement())
   no           Int
@@ -40,6 +141,7 @@ model HookFormula {
 
 model ListingAffiliate {
   id                Int       @id @default(autoincrement())
+  workspaceId       Int       @default(1)
   bulanListing      String?
   tanggalListing    DateTime?
   usernameTiktok    String
@@ -70,6 +172,7 @@ model ListingAffiliate {
 
 model DatabaseAffiliate {
   id                  Int       @id @default(autoincrement())
+  workspaceId         Int       @default(1)
   tahun               String    @default("")
   tanggalKirimSample  DateTime?
   status              String    @default("Aktif")
@@ -114,6 +217,7 @@ model BroadcastPreset {
 
 model RecruitmentBroadcast {
   id           Int       @id @default(autoincrement())
+  workspaceId  Int       @default(1)
   name         String    @default("")
   message      String    @default("")
   variations   String    @default("[]")
@@ -135,6 +239,7 @@ model RecruitmentBroadcast {
 
 model WaMessageQueue {
   id             Int       @id @default(autoincrement())
+  workspaceId    Int       @default(1)
   broadcastId    Int?
   broadcast      RecruitmentBroadcast? @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   phone          String
@@ -158,6 +263,7 @@ model WaMessageQueue {
 
 model DataMingguan {
   id                       Int      @id @default(autoincrement())
+  workspaceId              Int      @default(1)
   periode                  DateTime
   creatorUsername          String
   affiliateGmv             Float    @default(0)
@@ -182,6 +288,7 @@ model DataMingguan {
 
 model DataBulanan {
   id                       Int      @id @default(autoincrement())
+  workspaceId              Int      @default(1)
   periode                  DateTime
   creatorUsername          String
   affiliateGmv             Float    @default(0)
@@ -206,6 +313,7 @@ model DataBulanan {
 
 model TieredProgram {
   id             Int      @id @default(autoincrement())
+  workspaceId    Int      @default(1)
   tiktokUsername String
   program        String   @default("")
   bulan          String
@@ -221,6 +329,7 @@ model TieredProgram {
 
 model AffiliateProgram {
   id                 Int       @id @default(autoincrement())
+  workspaceId        Int       @default(1)
   tiktokUsername     String
   namaAffiliator     String    @default("")
   namaProgram        String    @default("")
@@ -252,6 +361,7 @@ model AffiliateProgram {
 
 model SampleDelivery {
   id               Int      @id @default(autoincrement())
+  workspaceId      Int      @default(1)
   affiliateUsername String  // FK to DatabaseAffiliate.tiktokUsername
   tanggalKirim     DateTime @default(now())
   produk           String   @default("")
@@ -311,6 +421,7 @@ model GoogleIntegration {
 
 model VideoReferensi {
   id               Int      @id @default(autoincrement())
+  workspaceId      Int      @default(1)
   usernameTiktok   String
   linkTiktok       String   @default("")
   linkVideo        String   @default("")   // original TikTok video URL
@@ -370,6 +481,7 @@ model AppConfig {
 
 model ReminderLog {
   id           Int      @id @default(autoincrement())
+  workspaceId  Int      @default(1)
   createdAt    DateTime @default(now())
   deliveryId   Int?
   username     String
@@ -400,6 +512,7 @@ model VideoSubmission {
 
 model Campaign {
   id                  Int                  @id @default(autoincrement())
+  workspaceId         Int                  @default(1)
   nama                String
   slug                String               @default("")
   objectives          String               @default("[]")  // JSON string[]
@@ -554,6 +667,7 @@ model BroadcastLog {
 
 model WhatsappSession {
   id           Int       @id @default(autoincrement())
+  ownerUserId  String    @default("") // FK to User.id — sender belongs to a user, not a workspace
   name         String    @default("")
   phone        String    @default("")
   status       String    @default("DISCONNECTED") // CONNECTED|DISCONNECTED|CONNECTING|QR_READY|RECONNECTING|LIMITED|WARMUP|BANNED
@@ -568,4 +682,6 @@ model WhatsappSession {
   successCount Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  ownerUser    User?     @relation("SessionOwner", fields: [ownerUserId], references: [id])
 }

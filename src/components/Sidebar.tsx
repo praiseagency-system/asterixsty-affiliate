@@ -4,7 +4,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import { useBranding } from "@/contexts/BrandingContext";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 
 // ─── SVG Icon primitives ──────────────────────────────────────────────────────
 function Icon({ d, className = "" }: { d: string | readonly string[]; className?: string }) {
@@ -231,10 +233,15 @@ export default function Sidebar() {
   const pathname = usePathname();
   const isDashboard = pathname === "/";
   const { brand } = useBranding();
+  const { data: session } = useSession();
 
   const brandName   = brand.brandName   || "ASTERIXSTY";
   const brandSystem = brand.brandSystem || "Affiliate Manager";
   const logoPath    = brand.logoPath    || "";
+
+  const userName  = session?.user?.name  || "User";
+  const userEmail = session?.user?.email || "";
+  const userImage = session?.user?.image || "";
 
   return (
     <aside className="w-60 bg-white border-r border-gray-200 flex flex-col shrink-0 h-full">
@@ -260,6 +267,11 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* ── Workspace switcher ── */}
+      <div className="border-b border-gray-100">
+        <WorkspaceSwitcher />
+      </div>
+
       {/* ── Nav ── */}
       <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-0.5">
         <Link
@@ -279,12 +291,60 @@ export default function Sidebar() {
         {GROUPS.map((group) => (
           <CollapsibleGroup key={group.id} group={group} pathname={pathname} />
         ))}
+
+        {/* Team management link */}
+        <div className="h-px bg-gray-100 mx-1 my-2" />
+        <Link
+          href="/team"
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+            pathname.startsWith("/team")
+              ? "bg-indigo-50 text-indigo-700"
+              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+          }`}
+        >
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          <span>Team Management</span>
+        </Link>
       </nav>
 
-      {/* ── Footer ── */}
-      <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
-        <p className="text-[11px] text-gray-400">by Praise · v2.0</p>
-        <div className="w-2 h-2 rounded-full bg-green-400" title="System online" />
+      {/* ── User footer ── */}
+      <div className="px-3 py-3 border-t border-gray-100">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          {/* Avatar */}
+          {userImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={userImage} alt={userName} className="w-8 h-8 rounded-full border border-gray-100 shrink-0 object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-semibold">{userName.slice(0, 1).toUpperCase()}</span>
+            </div>
+          )}
+          {/* Name + email */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-semibold text-gray-800 truncate leading-tight">{userName}</p>
+            <p className="text-[10px] text-gray-400 truncate leading-tight">{userEmail}</p>
+          </div>
+          {/* Logout */}
+          {session && (
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              title="Sign out"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <div className="flex items-center justify-between px-2 mt-1">
+          <p className="text-[10px] text-gray-300">by Praise · v2.0</p>
+          <div className="w-1.5 h-1.5 rounded-full bg-green-400" title="System online" />
+        </div>
       </div>
     </aside>
   );

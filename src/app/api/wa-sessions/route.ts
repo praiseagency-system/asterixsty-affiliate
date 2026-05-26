@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import {
   getAllMultiSessionStates,
   connectMultiSession,
@@ -9,12 +10,19 @@ import {
 export const dynamic = "force-dynamic";
 
 // ── GET /api/wa-sessions ──────────────────────────────────────────────────────
-// Returns all sessions merged with in-memory state.
+// Returns sessions for the current user (ownerUserId = user.id OR legacy empty).
 // Also auto-seeds session 1 (Primary) if no sessions exist in DB.
 export async function GET() {
   const prisma = getPrisma();
   try {
+    const session = await auth();
+    const userId  = session?.user?.id ?? "";
+
+    // Show sessions owned by this user + legacy sessions (ownerUserId = "")
     let sessions = await prisma.whatsappSession.findMany({
+      where: userId
+        ? { OR: [{ ownerUserId: userId }, { ownerUserId: "" }] }
+        : {},
       orderBy: { id: "asc" },
     });
 
@@ -72,8 +80,11 @@ export async function POST(req: Request) {
       });
     }
 
+    const session = await auth();
+    const userId  = session?.user?.id ?? "";
+
     const created = await prisma.whatsappSession.create({
-      data: { name, dailyLimit, isDefault, status: "DISCONNECTED" },
+      data: { name, dailyLimit, isDefault, status: "DISCONNECTED", ownerUserId: userId },
     });
 
     // Trigger connect (non-blocking) — will show QR

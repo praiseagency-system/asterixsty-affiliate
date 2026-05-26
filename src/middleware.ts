@@ -1,0 +1,50 @@
+import { auth } from "@/auth";
+import { NextResponse } from "next/server";
+
+// Routes that never require authentication
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth",
+  "/join/",          // public campaign join pages
+  "/submit-video/",  // affiliate video submission
+  "/api/submit-video",
+  "/favicon.ico",
+  "/_next",
+];
+
+function isPublic(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p));
+}
+
+export default auth((req) => {
+  const { pathname } = req.nextUrl;
+
+  // Always allow public paths
+  if (isPublic(pathname)) return NextResponse.next();
+
+  // Skip auth check if Google credentials are not configured (dev/preview fallback)
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return NextResponse.next();
+  }
+
+  // Require session for everything else
+  if (!req.auth) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths EXCEPT:
+     * - _next/static (static files)
+     * - _next/image (image optimization)
+     * - favicon.ico
+     */
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
+};

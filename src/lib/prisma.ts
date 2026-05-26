@@ -28,6 +28,12 @@ const REQUIRED_MODELS = [
   "campaignForm",
   "campaignRegistration",
   "whatsappSession",
+  "user",
+  "workspace",
+  "workspaceMember",
+  "agency",
+  "account",
+  "session",
 ] as const;
 
 /**

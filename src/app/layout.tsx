@@ -1,28 +1,32 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 import { BrandingProvider } from "@/contexts/BrandingContext";
+import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
+import { AuthProvider } from "@/components/AuthProvider";
+import { AppShell } from "@/components/AppShell";
+import { auth } from "@/auth";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Asterixsty | Affiliate Marketing",
-  description: "TikTok Affiliate Marketing Management — Asterixsty Perfumery",
+  title: "Praise Agency · Affiliate Platform",
+  description: "TikTok Affiliate Marketing Management — Praise Agency",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
   return (
     <html lang="id" className="h-full">
       <body className={`${inter.className} h-full bg-gray-50 text-gray-900`}>
-        <BrandingProvider>
-          <div className="flex h-full">
-            <Sidebar />
-            <main className="flex-1 overflow-auto">
-              <div className="p-6 max-w-screen-2xl mx-auto">{children}</div>
-            </main>
-          </div>
-        </BrandingProvider>
+        <AuthProvider session={session}>
+          <BrandingProvider>
+            <WorkspaceProvider userId={session?.user?.id}>
+              <AppShell>{children}</AppShell>
+            </WorkspaceProvider>
+          </BrandingProvider>
+        </AuthProvider>
       </body>
     </html>
   );
