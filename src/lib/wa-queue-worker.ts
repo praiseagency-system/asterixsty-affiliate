@@ -118,17 +118,32 @@ export function getWorkerState(): WorkerState {
 }
 
 /**
- * Reset queue items stuck in "processing" (e.g. from server restart).
- * Called in instrumentation.ts on startup.
+ * Reset queue items stuck in "processing".
+ * Two modes:
+ *   1. On startup: reset ALL processing items (server restarted, locks are stale).
+ *   2. Periodic: reset items stuck in processing for > staleMinutes (worker crash mid-send).
+ *
+ * Called from instrumentation.ts on startup and from the scheduler periodically.
  */
-export async function resetStaleProcessing(): Promise<number> {
+export async function resetStaleProcessing(staleMinutes = 0): Promise<number> {
   const prisma = getPrisma();
   try {
+    const where =
+      staleMinutes > 0
+        ? {
+            status:    "processing" as const,
+            updatedAt: { lt: new Date(Date.now() - staleMinutes * 60 * 1000) },
+          }
+        : { status: "processing" as const };
+
     const result = await prisma.waMessageQueue.updateMany({
-      where: { status: "processing" },
+      where,
       data: {
         status:      "pending",
-        errorReason: "Reset oleh server restart",
+        errorReason:
+          staleMinutes > 0
+            ? `Reset: lock stale setelah ${staleMinutes} menit`
+            : "Reset oleh server restart",
       },
     });
     if (result.count > 0) {
@@ -304,6 +319,25 @@ async function workerLoop(broadcastId: number | null): Promise<void> {
       // Another process already claimed it — skip
       continue;
     }
+
+    // ── Secondary safety: re-read sentAt after claim ─────────────────────────
+    // Guards against rare race where item was processed by another path between
+    // the findFirst and our updateMany claim.
+    try {
+      const freshCheck = await prisma.waMessageQueue.findUnique({
+        where:  { id: item.id },
+        select: { sentAt: true },
+      });
+      if (freshCheck?.sentAt) {
+        // Already sent — release our "processing" claim back to "success"
+        await prisma.waMessageQueue.updateMany({
+          where: { id: item.id, status: "processing" },
+          data:  { status: "success" },
+        });
+        w.state.currentItem = null;
+        continue;
+      }
+    } catch { /* ignore — proceed with send */ }
 
     // ── Process item ─────────────────────────────────────────────────────────
     const recipientName = item.recipientName ?? item.tiktokUsername ?? "Unknown";

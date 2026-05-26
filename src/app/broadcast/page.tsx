@@ -986,6 +986,7 @@ function BroadcastPageInner() {
   // Background worker state (replaces client-side auto-send loop)
   const [workerStatus, setWorkerStatus]   = useState<WorkerState | null>(null);
   const [countdown, setCountdown]         = useState(0);
+  const [startingWorker, setStartingWorker] = useState(false); // prevent double-click on Start Auto
   const nextSendAtRef                     = useRef<string | null>(null);
   const workerPollRef                     = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1264,13 +1265,22 @@ function BroadcastPageInner() {
     void fetch("/api/wa-queue/worker", { method: "DELETE" });
   }
 
-  function startAutoRun() {
-    if (!monitorBroadcastId) return;
-    void fetch("/api/wa-queue/worker", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ broadcastId: monitorBroadcastId }),
-    });
+  async function startAutoRun() {
+    if (!monitorBroadcastId || startingWorker || isAutoRunning) return;
+    setStartingWorker(true);
+    try {
+      const res = await fetch("/api/wa-queue/worker", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ broadcastId: monitorBroadcastId }),
+      });
+      if (res.ok) {
+        const d = await res.json() as { ok: boolean; error?: string };
+        if (!d.ok && d.error) showToast(`❌ ${d.error}`);
+      }
+    } catch { /* ignore */ } finally {
+      setStartingWorker(false);
+    }
   }
 
   async function handleProcessQueue() {
@@ -1278,14 +1288,21 @@ function BroadcastPageInner() {
     setProcessingQueue(true);
     try {
       const r = await fetch(`/api/wa-queue/process?limit=1&broadcastId=${monitorBroadcastId}`, { method: "POST" });
-      if (r.ok) {
-        const d = await r.json() as ProcessResult;
-        if (!d.waConnected) { showToast("⚠️ WA tidak terhubung. Hubungkan dulu di Automation Center."); }
-        else if (d.error) { showToast(`❌ ${d.error}`); }
-        else { showToast(`✅ Diproses: ${d.processed} pesan (${d.success} sukses, ${d.failed} gagal)`); }
-        await loadQueue(monitorBroadcastId);
-        await loadAll();
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { error?: string; workerActive?: boolean };
+        if (d.workerActive) {
+          showToast("ℹ️ Background worker sedang aktif — gunakan tombol Stop/Start di atas");
+        } else {
+          showToast(`❌ ${d.error || "Gagal memproses antrian"}`);
+        }
+        return;
       }
+      const d = await r.json() as ProcessResult;
+      if (!d.waConnected) { showToast("⚠️ WA tidak terhubung. Hubungkan dulu di Automation Center."); }
+      else if (d.error) { showToast(`❌ ${d.error}`); }
+      else { showToast(`✅ Diproses: ${d.processed} pesan (${d.success} sukses, ${d.failed} gagal)`); }
+      await loadQueue(monitorBroadcastId);
+      await loadAll();
     } finally { setProcessingQueue(false); }
   }
 
@@ -1657,14 +1674,19 @@ function BroadcastPageInner() {
               {/* Start Auto / Stop toggle */}
               {!isAutoRunning ? (
                 <button
-                  onClick={startAutoRun}
-                  disabled={queueSummary.pending === 0 && queueSummary.retry === 0}
+                  onClick={() => void startAutoRun()}
+                  disabled={startingWorker || (queueSummary.pending === 0 && queueSummary.retry === 0)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    queueSummary.pending === 0 && queueSummary.retry === 0
+                    startingWorker || (queueSummary.pending === 0 && queueSummary.retry === 0)
                       ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                       : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
                   }`}>
-                  ▶ Start Auto
+                  {startingWorker ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+                      Memulai...
+                    </span>
+                  ) : "▶ Start Auto"}
                 </button>
               ) : (
                 <button onClick={stopAutoRun}

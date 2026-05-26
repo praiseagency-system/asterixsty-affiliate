@@ -94,21 +94,45 @@ export async function processWaQueue(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
 
+    // ── Atomic claim — prevents any other processor from taking this item ──────
+    // MUST use updateMany with status filter, not update without filter.
+    // If status changed between findMany and this point (e.g. background worker
+    // grabbed it), count=0 and we skip. This is the primary dedup guard.
+    const claimed = await prisma.waMessageQueue.updateMany({
+      where: { id: item.id, status: { in: ["pending", "retry"] } },
+      data:  { status: "processing", attempts: item.attempts + 1 },
+    });
+    if (claimed.count === 0) {
+      // Another processor already claimed this item — skip silently
+      skipped++;
+      continue;
+    }
+
     if (!item.phone) {
-      await prisma.waMessageQueue.update({
-        where: { id: item.id },
-        data: { status: "failed", errorReason: "Nomor WA tidak tersedia", attempts: item.attempts + 1 },
+      await prisma.waMessageQueue.updateMany({
+        where: { id: item.id, status: "processing" },
+        data:  { status: "failed", errorReason: "Nomor WA tidak tersedia" },
       });
       failed++;
       lastRecipient = { name: item.recipientName ?? "", phone: "", status: "failed" };
       continue;
     }
 
-    // Mark as processing
-    await prisma.waMessageQueue.update({
-      where: { id: item.id },
-      data:  { status: "processing", attempts: item.attempts + 1 },
+    // Secondary safety: re-read sentAt to catch any race that slipped past the claim
+    const freshCheck = await prisma.waMessageQueue.findUnique({
+      where:  { id: item.id },
+      select: { sentAt: true },
     });
+    if (freshCheck?.sentAt) {
+      // Already sent by another path — release claim without re-sending
+      await prisma.waMessageQueue.updateMany({
+        where: { id: item.id, status: "processing" },
+        data:  { status: "success" },
+      });
+      success++;
+      lastRecipient = { name: item.recipientName ?? "", phone: item.phone, status: "success" };
+      continue;
+    }
 
     // ── Resolve sender ─────────────────────────────────────────────────────
     // All sessions (including 1) go through sendViaMultiSession.
