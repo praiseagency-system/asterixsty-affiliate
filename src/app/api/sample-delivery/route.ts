@@ -119,17 +119,41 @@ export async function POST(req: Request) {
     }
   } catch { /* non-critical — don't fail the request */ }
 
-  // ── Auto-send WhatsApp with submission form link ───────────────────────────
+  // ── Resolve category-specific campaign info ───────────────────────────────
   const host     = req.headers.get("host") || "localhost:3000";
   const proto    = req.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
   const baseUrl  = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
 
+  let campaignFormLink = "";
+  let campaignName     = "";
+  if (item.sampleCategory === "Campaign Support" && item.relatedCampaignId) {
+    try {
+      const GFORM = "https://docs.google.com/forms/d/e";
+      const [cf, camp] = await Promise.all([
+        prisma.campaignForm.findUnique({
+          where:  { campaignId: item.relatedCampaignId },
+          select: { subFormPublicId: true },
+        }),
+        prisma.campaign.findUnique({
+          where:  { id: item.relatedCampaignId },
+          select: { nama: true },
+        }),
+      ]);
+      if (cf?.subFormPublicId) campaignFormLink = `${GFORM}/${cf.subFormPublicId}/viewform`;
+      if (camp?.nama)          campaignName     = camp.nama;
+    } catch { /* non-critical */ }
+  }
+
+  // ── Auto-send WhatsApp ─────────────────────────────────────────────────────
   const { waStatus, phone, submissionLink, waError } = await sendSampleDeliveryWA({
     deliveryId:        item.id,
     affiliateUsername: item.affiliateUsername,
     produk:            item.produk,
     baseUrl,
-    googleFormLink,    // will override internal link in the WA message if set
+    googleFormLink,
+    sampleCategory:    item.sampleCategory,
+    campaignName,
+    campaignFormLink,
   });
 
   return NextResponse.json({

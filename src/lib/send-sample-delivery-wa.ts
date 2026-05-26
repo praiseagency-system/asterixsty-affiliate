@@ -2,6 +2,13 @@
  * Shared utility: send WhatsApp with the submission form link
  * after a sample delivery is created or on manual resend.
  * Logs to ReminderLog on every attempt.
+ *
+ * Category-aware:
+ *   First Collaboration  → "Sample Delivery" template, default form
+ *   Campaign Support     → "Sample Delivery — Campaign Support" template, campaign form
+ *   Repeat / Restock     → "Sample Delivery — Repeat / Restock" template, default form
+ *   Paid Collaboration   → "Sample Delivery — Paid Collaboration" template, default form
+ *   Custom Request       → "Sample Delivery — Custom Request" template, no form required
  */
 import { prisma } from "@/lib/prisma";
 import { getBrandConfig } from "@/lib/brand";
@@ -39,20 +46,65 @@ function fillMsg(tpl: string, vars: Record<string, string>) {
   return out;
 }
 
+/** Build the tipeReminder key for a given category */
+export function categoryTipeReminder(sampleCategory: string): string {
+  return sampleCategory && sampleCategory !== "First Collaboration"
+    ? `Sample Delivery — ${sampleCategory}`
+    : "Sample Delivery";
+}
+
+/**
+ * Look up a category-specific template first; fall back to the generic one.
+ * e.g. "Reminder Video 1 — Campaign Support" → "Reminder Video 1"
+ */
+export async function findCategoryTemplate(
+  tipeReminder: string,
+  category: string,
+) {
+  if (category && category !== "First Collaboration") {
+    const cat = await prisma.reminderTemplate.findFirst({
+      where: { tipeReminder: `${tipeReminder} — ${category}`, aktif: true },
+    });
+    if (cat) return cat;
+  }
+  return prisma.reminderTemplate.findFirst({
+    where: { tipeReminder, aktif: true },
+  });
+}
+
 export async function sendSampleDeliveryWA(params: {
-  deliveryId: number;
+  deliveryId:       number;
   affiliateUsername: string;
-  produk: string;
-  baseUrl: string;
-  logType?: string;
-  googleFormLink?: string; // if set, used instead of internal /submit-video link
+  produk:           string;
+  baseUrl:          string;
+  logType?:         string;
+  googleFormLink?:  string; // personalized prefilled form (default form)
+  sampleCategory?:  string; // drives template + form selection
+  campaignName?:    string; // for {campaign_name} placeholder
+  campaignFormLink?: string; // campaign submission form (Campaign Support)
 }): Promise<{ waStatus: WaSendStatus; phone: string; submissionLink: string; waError: string }> {
-  const { deliveryId, affiliateUsername, produk, baseUrl, logType = "Sample Delivery", googleFormLink } = params;
-  // Prefer Google Form link; fall back to internal page
-  const submissionLink = googleFormLink || `${baseUrl}/submit-video/${deliveryId}`;
+  const {
+    deliveryId,
+    affiliateUsername,
+    produk,
+    baseUrl,
+    logType      = "Sample Delivery",
+    googleFormLink,
+    sampleCategory  = "First Collaboration",
+    campaignName    = "",
+    campaignFormLink = "",
+  } = params;
+
+  // ── Resolve submission link ───────────────────────────────────────────────
+  // Campaign Support → prefer campaign submission form
+  // Others          → google (personalized) form → internal /submit-video page
+  const submissionLink =
+    sampleCategory === "Campaign Support" && campaignFormLink
+      ? campaignFormLink
+      : googleFormLink || `${baseUrl}/submit-video/${deliveryId}`;
 
   let waStatus: WaSendStatus = "no_wa";
-  let phone = "";
+  let phone   = "";
   let waError = "";
 
   try {
@@ -67,57 +119,66 @@ export async function sendSampleDeliveryWA(params: {
     }
     phone = affiliate.noWhatsapp;
 
-    // 2. Check WA connection (dynamic import avoids edge-runtime issues)
+    // 2. Check WA connection
     const { sendUnified, isAnySessionConnected } = await import("@/lib/wa-multi-client");
     if (!isAnySessionConnected()) {
       return { waStatus: "no_wa", phone, submissionLink, waError: "WhatsApp tidak terhubung" };
     }
 
-    // 3. Get brand config
+    // 3. Brand config
     const brand = await getBrandConfig();
 
-    // 4. Find or auto-create "Sample Delivery" template
+    // 4. Category-specific template lookup
+    //    Try "Sample Delivery — {category}" first; fall back to "Sample Delivery"
+    const catTipe = categoryTipeReminder(sampleCategory);
     let tpl = await prisma.reminderTemplate.findFirst({
-      where: { tipeReminder: "Sample Delivery", aktif: true },
+      where: { tipeReminder: catTipe, aktif: true },
     });
+    if (!tpl && catTipe !== "Sample Delivery") {
+      tpl = await prisma.reminderTemplate.findFirst({
+        where: { tipeReminder: "Sample Delivery", aktif: true },
+      });
+    }
     if (!tpl) {
       // Auto-seed default template (runs once)
       tpl = await prisma.reminderTemplate.create({
         data: {
-          nama: "Sample Delivery + Form Link",
-          tipeReminder: "Sample Delivery",
-          isiPesan: DEFAULT_SAMPLE_DELIVERY_TPL,
-          aktif: true,
+          nama:        "Sample Delivery + Form Link",
+          tipeReminder:"Sample Delivery",
+          isiPesan:    DEFAULT_SAMPLE_DELIVERY_TPL,
+          aktif:       true,
         },
       });
     }
 
     // 5. Fill template variables
     const msg = fillMsg(tpl.isiPesan, {
-      username: `@${affiliateUsername}`,
+      username:             `@${affiliateUsername}`,
       produk,
       submission_form_link: submissionLink,
-      submission_link: submissionLink,
-      brand_name: brand.brandName,
-      footer_branding: brand.waFooter,
-      footer: brand.waFooter,
+      submission_link:      submissionLink,
+      brand_name:           brand.brandName,
+      footer_branding:      brand.waFooter,
+      footer:               brand.waFooter,
+      campaign_name:        campaignName,
+      pic:                  "",
     });
 
-    // 6. Send (use unified sender — picks default/healthiest session automatically)
+    // 6. Send
     const result = await sendUnified(phone, msg);
     waStatus = result.ok ? "sent" : "failed";
-    waError = result.error || "";
+    waError  = result.error || "";
 
-    // 7. Log to ReminderLog
+    // 7. Log
     await prisma.reminderLog.create({
       data: {
         deliveryId,
-        username: affiliateUsername,
+        username:     affiliateUsername,
         tipeReminder: logType,
-        status: waStatus,
+        status:       waStatus,
         phone,
-        pesan: msg,
-        errorMsg: waError,
+        pesan:        msg,
+        errorMsg:     waError,
       },
     });
 
