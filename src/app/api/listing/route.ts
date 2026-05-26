@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { calcListingScore } from "@/lib/listingScore";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export async function GET(req: Request) {
   const approvalFilter = url.searchParams.get("approval") || "";
   const visualTake     = url.searchParams.get("visualTake") || "";
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const wsId = resolveWorkspaceId(req) ?? 1;
+  const where: Record<string, unknown> = { deletedAt: null, workspaceId: wsId };
   if (search)   where.usernameTiktok = { contains: search };
   if (worthIt)  where.worthIt = worthIt;
   if (sampleFilter) where.sampleDecision = sampleFilter;
@@ -38,6 +40,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const prisma = getPrisma();
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
 
   const scores = await calcListingScore({
@@ -57,6 +60,7 @@ export async function POST(req: Request) {
 
   const item = await prisma.listingAffiliate.create({
     data: {
+      workspaceId:      wsId,
       usernameTiktok:   rawUsername,
       linkTiktok,
       followers:        Number(body.followers) || 0,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTierBadgeDB } from "@/lib/tier";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,11 @@ export async function GET(req: Request) {
   const search = url.searchParams.get("search") || "";
   const filterProgram = url.searchParams.get("program") || "";
 
+  const wsId = resolveWorkspaceId(req) ?? 1;
+
   // All available week dates, sorted newest first
   const allPeriodeRows = await prisma.dataMingguan.findMany({
+    where: { workspaceId: wsId },
     select: { periode: true },
     distinct: ["periode"],
     orderBy: { periode: "desc" },
@@ -55,11 +59,11 @@ export async function GET(req: Request) {
   const { start: curStart, end: curEnd } = dayRange(targetDate);
   const [currentData, prevData] = await Promise.all([
     prisma.dataMingguan.findMany({
-      where: { periode: { gte: curStart, lt: curEnd }, affiliateGmv: { gt: 50_000 } },
+      where: { workspaceId: wsId, periode: { gte: curStart, lt: curEnd }, affiliateGmv: { gt: 50_000 } },
     }),
     prevDate
       ? prisma.dataMingguan.findMany({
-          where: { periode: { gte: dayRange(prevDate).start, lt: dayRange(prevDate).end } },
+          where: { workspaceId: wsId, periode: { gte: dayRange(prevDate).start, lt: dayRange(prevDate).end } },
         })
       : Promise.resolve([]),
   ]);

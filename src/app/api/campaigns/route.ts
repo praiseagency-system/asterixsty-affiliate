@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,8 @@ export async function GET(req: Request) {
     const status    = url.searchParams.get("status") || "";
     const templates = url.searchParams.get("templates") === "1";
 
-    const where: Record<string, unknown> = { deletedAt: null };
+    const wsId = resolveWorkspaceId(req) ?? 1;
+    const where: Record<string, unknown> = { deletedAt: null, workspaceId: wsId };
     if (status) where.status = status;
     where.isTemplate = templates;
 
@@ -73,6 +75,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const prisma = getPrisma();
   try {
+    const wsId = resolveWorkspaceId(req) ?? 1;
     const body = await req.json() as Record<string, unknown>;
 
     const nama = String(body.nama || "").trim();
@@ -97,6 +100,7 @@ export async function POST(req: Request) {
 
     const campaign = await prisma.campaign.create({
       data: {
+        workspaceId: wsId,
         nama,
         slug:                String(body.slug || "").trim(),
         objectives:          toJsonStr(body.objectives),

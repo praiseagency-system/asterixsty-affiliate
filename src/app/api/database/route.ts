@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export async function GET(req: Request) {
   const group      = url.searchParams.get("group")      || "";
   const category   = url.searchParams.get("category")   || "";
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const wsId = resolveWorkspaceId(req) ?? 1;
+  const where: Record<string, unknown> = { deletedAt: null, workspaceId: wsId };
   if (search) {
     where.OR = [
       { tiktokUsername: { contains: search } },
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
   // Attach sample delivery summary per affiliate
   const usernames = affiliates.map((a) => a.tiktokUsername);
   const deliveries = await prisma.sampleDelivery.findMany({
-    where: { affiliateUsername: { in: usernames } },
+    where: { workspaceId: wsId, affiliateUsername: { in: usernames } },
     select: { affiliateUsername: true, totalVideoTarget: true, totalVideoDone: true },
   });
 
@@ -69,9 +71,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const item = await prisma.databaseAffiliate.create({
     data: {
+      workspaceId:         wsId,
       tiktokUsername:      body.tiktokUsername || "",
       namaAffiliator:      body.namaAffiliator || "",
       status:              body.status || "Aktif",

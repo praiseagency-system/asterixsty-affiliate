@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const url = new URL(req.url);
   const tahun = parseInt(url.searchParams.get("tahun") || String(new Date().getFullYear()));
 
   const items = await prisma.tieredProgram.findMany({
-    where: { tahun },
+    where: { workspaceId: wsId, tahun },
     orderBy: [{ tiktokUsername: "asc" }, { bulan: "asc" }],
   });
 
@@ -29,12 +31,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const item = await prisma.tieredProgram.upsert({
     where: {
       id: body.id || 0,
     },
-    create: body,
+    create: { ...body, workspaceId: wsId },
     update: body,
   });
   return NextResponse.json(item);

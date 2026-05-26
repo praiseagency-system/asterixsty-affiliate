@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStatusInfo } from "@/lib/format";
 import { getTierBadgeDB, getScoreDB } from "@/lib/tier";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,10 @@ export async function GET(req: Request) {
   const gmvMin = parseFloat(url.searchParams.get("gmvMin") || "0") || 0;
   const gmvMax = parseFloat(url.searchParams.get("gmvMax") || "0") || 0;
 
+  const wsId = resolveWorkspaceId(req) ?? 1;
+
   const periodes = await prisma.dataBulanan.findMany({
+    where: { workspaceId: wsId },
     select: { periode: true },
     distinct: ["periode"],
     orderBy: { periode: "desc" },
@@ -35,13 +39,14 @@ export async function GET(req: Request) {
   const prevEnd = new Date(start);
 
   const [currentData, prevData, dbAffiliates, sampleDeliveries] = await Promise.all([
-    prisma.dataBulanan.findMany({ where: { periode: { gte: start, lt: end }, affiliateGmv: { gt: 50_000 } } }),
-    prisma.dataBulanan.findMany({ where: { periode: { gte: prevStart, lt: prevEnd }, affiliateGmv: { gt: 50_000 } } }),
+    prisma.dataBulanan.findMany({ where: { workspaceId: wsId, periode: { gte: start, lt: end }, affiliateGmv: { gt: 50_000 } } }),
+    prisma.dataBulanan.findMany({ where: { workspaceId: wsId, periode: { gte: prevStart, lt: prevEnd }, affiliateGmv: { gt: 50_000 } } }),
     prisma.databaseAffiliate.findMany({
+      where: { workspaceId: wsId },
       select: { tiktokUsername: true, namaAffiliator: true, samplePertama: true, tanggalKirimSample: true, affiliateSpecialist: true },
     }),
     prisma.sampleDelivery.findMany({
-      where: { deletedAt: null },
+      where: { workspaceId: wsId, deletedAt: null },
       select: { affiliateUsername: true, produk: true },
       orderBy: { tanggalKirim: "asc" },
     }),

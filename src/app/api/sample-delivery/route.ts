@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendSampleDeliveryWA } from "@/lib/send-sample-delivery-wa";
 import { generatePersonalFormLink } from "@/lib/google-auth";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ export async function GET(req: Request) {
   const campaignIdParam = url.searchParams.get("campaignId") || "";
   const picIdParam      = url.searchParams.get("picId") || "";
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const wsId = resolveWorkspaceId(req) ?? 1;
+  const where: Record<string, unknown> = { deletedAt: null, workspaceId: wsId };
   if (username)        where.affiliateUsername = { contains: username };
   if (categoryFilter)  where.sampleCategory    = categoryFilter;
   if (campaignIdParam) where.relatedCampaignId = Number(campaignIdParam);
@@ -78,6 +80,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const target = Number(body.totalVideoTarget) || 0;
 
@@ -119,6 +122,7 @@ export async function POST(req: Request) {
 
   const item = await prisma.sampleDelivery.create({
     data: {
+      workspaceId:        wsId,
       affiliateUsername:  (body.affiliateUsername || "").replace(/^@/, ""),
       tanggalKirim:       body.tanggalKirim ? new Date(body.tanggalKirim) : new Date(),
       produk:             body.produk || "",

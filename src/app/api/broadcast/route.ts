@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { isAnySessionConnected, getPrimaryPhone } from "@/lib/wa-multi-client";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ export async function GET(req: Request) {
   const limit  = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
 
   try {
-    const where: Record<string, unknown> = {};
+    const wsId = resolveWorkspaceId(req) ?? 1;
+    const where: Record<string, unknown> = { workspaceId: wsId };
     if (status) where.status = status;
 
     const broadcasts = await prisma.recruitmentBroadcast.findMany({
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const prisma = getPrisma();   // always get live client (handles stale singleton in dev)
   try {
+    const wsId = resolveWorkspaceId(req) ?? 1;
     const body = await req.json() as Record<string, unknown>;
 
     const message = String(body.message || "").trim();
@@ -72,8 +75,8 @@ export async function POST(req: Request) {
       }; } catch { return { type: "All" }; }
     })();
 
-    // Build Prisma where for recipients
-    const where: Record<string, unknown> = { deletedAt: null, status: "Aktif" };
+    // Build Prisma where for recipients (scoped to this workspace)
+    const where: Record<string, unknown> = { deletedAt: null, status: "Aktif", workspaceId: wsId };
     if (target.type === "Manual") {
       if (target.manualIds?.length) {
         // Explicit ID list takes priority over text search
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
     // Create broadcast record
     const broadcast = await prisma.recruitmentBroadcast.create({
       data: {
+        workspaceId:     wsId,
         name:            String(body.name || "").trim(),
         message,
         variations:      JSON.stringify(variations),
@@ -199,6 +203,7 @@ export async function POST(req: Request) {
 
         return {
           broadcastId:    broadcast.id,
+          workspaceId:    wsId,
           phone:          aff.noWhatsapp,
           message:        resolved,
           recipientName:  aff.namaAffiliator || aff.tiktokUsername,

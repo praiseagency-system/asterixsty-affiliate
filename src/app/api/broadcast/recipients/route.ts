@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,8 @@ export async function GET(req: Request) {
   const limit       = Math.min(parseInt(url.searchParams.get("limit") || "300"), 500);
 
   try {
-    const where: Record<string, unknown> = { deletedAt: null, status: "Aktif" };
+    const wsId = resolveWorkspaceId(req) ?? 1;
+    const where: Record<string, unknown> = { deletedAt: null, status: "Aktif", workspaceId: wsId };
 
     if (type === "Manual" && manualIds) {
       // Manual include mode: only these specific IDs

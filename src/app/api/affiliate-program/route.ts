@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ async function fetchCurrentGmv(
 
 // ─── GET /api/affiliate-program ────────────────────────────────────────────
 export async function GET(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const url = new URL(req.url);
   const filterStatus = url.searchParams.get("status") || "";
   const filterPic    = url.searchParams.get("pic")    || "";
@@ -51,7 +53,7 @@ export async function GET(req: Request) {
   const limit        = parseInt(url.searchParams.get("limit") || "50");
 
   const programs = await prisma.affiliateProgram.findMany({
-    where: { deletedAt: null },
+    where: { workspaceId: wsId, deletedAt: null },
     orderBy: { createdAt: "desc" },
   });
 
@@ -101,6 +103,7 @@ export async function GET(req: Request) {
 
 // ─── POST /api/affiliate-program ───────────────────────────────────────────
 export async function POST(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const {
     tiktokUsername, namaAffiliator = "", namaProgram = "",
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
 
   const program = await prisma.affiliateProgram.create({
     data: {
+      workspaceId: wsId,
       tiktokUsername, namaAffiliator, namaProgram, periodeTipe,
       startDate: new Date(startDate), endDate: new Date(endDate),
       targetGmv, targetVideo, targetLive, targetOrders,

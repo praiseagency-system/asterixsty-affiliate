@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +47,9 @@ function mapRow(r: {
   };
 }
 
-async function sumHppSample(hppMap: Record<string, number>, start: Date, end: Date): Promise<number> {
+async function sumHppSample(hppMap: Record<string, number>, start: Date, end: Date, wsId: number): Promise<number> {
   const rows = await prisma.sampleDelivery.findMany({
-    where: { deletedAt: null, tanggalKirim: { gte: start, lt: end } },
+    where: { deletedAt: null, workspaceId: wsId, tanggalKirim: { gte: start, lt: end } },
     select: { produk: true, qtyProduk: true },
   });
   let total = 0;
@@ -62,6 +63,7 @@ async function sumHppSample(hppMap: Record<string, number>, start: Date, end: Da
 }
 
 export async function GET(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const url = new URL(req.url);
 
   let year  = url.searchParams.get("year")  ? parseInt(url.searchParams.get("year")!)  : null;
@@ -80,11 +82,13 @@ export async function GET(req: Request) {
   // ── 1. Discover available periods ──────────────────────────────────────────
   const [bulananPeriodes, minyuanPeriodes] = await Promise.all([
     prisma.dataBulanan.findMany({
+      where: { workspaceId: wsId },
       select: { periode: true },
       distinct: ["periode"],
       orderBy: { periode: "desc" },
     }),
     prisma.dataMingguan.findMany({
+      where: { workspaceId: wsId },
       select: { periode: true },
       distinct: ["periode"],
       orderBy: { periode: "asc" },
@@ -138,7 +142,7 @@ export async function GET(req: Request) {
   if (isYearlyMode) {
     // Full year from DataBulanan
     const rows = await prisma.dataBulanan.findMany({
-      where: { periode: { gte: yearStart, lt: yearEnd } },
+      where: { workspaceId: wsId, periode: { gte: yearStart, lt: yearEnd } },
     });
     kpiRows = rows.map(mapRow);
   } else if (week && month && weeksForMonth.includes(week)) {
@@ -152,13 +156,13 @@ export async function GET(req: Request) {
     )?.periode;
     if (weekDate) {
       const { start, end } = dayRange(weekDate);
-      const rows = await prisma.dataMingguan.findMany({ where: { periode: { gte: start, lt: end } } });
+      const rows = await prisma.dataMingguan.findMany({ where: { workspaceId: wsId, periode: { gte: start, lt: end } } });
       kpiRows = rows.map(mapRow);
     }
   } else {
     // Monthly mode: DataBulanan
     const rows = await prisma.dataBulanan.findMany({
-      where: { periode: { gte: monthStart, lt: monthEnd } },
+      where: { workspaceId: wsId, periode: { gte: monthStart, lt: monthEnd } },
     });
     kpiRows = rows.map(mapRow);
   }
@@ -172,7 +176,7 @@ export async function GET(req: Request) {
   if (isYearlyMode) {
     const pStart = new Date(year! - 1, 0, 1);
     const pEnd   = new Date(year!, 0, 1);
-    const rows   = await prisma.dataBulanan.findMany({ where: { periode: { gte: pStart, lt: pEnd } } });
+    const rows   = await prisma.dataBulanan.findMany({ where: { workspaceId: wsId, periode: { gte: pStart, lt: pEnd } } });
     prevKpiRows     = rows.map(mapRow);
     comparisonLabel = `vs ${year! - 1}`;
     prevSampleStart = pStart;
@@ -193,7 +197,7 @@ export async function GET(req: Request) {
       : undefined;
     if (prevWeekDate) {
       const { start, end } = dayRange(prevWeekDate);
-      const rows = await prisma.dataMingguan.findMany({ where: { periode: { gte: start, lt: end } } });
+      const rows = await prisma.dataMingguan.findMany({ where: { workspaceId: wsId, periode: { gte: start, lt: end } } });
       prevKpiRows = rows.map(mapRow);
       const pWk = weekOfMonth(prevWeekDate);
       const pMo = prevWeekDate.getMonth() + 1;
@@ -210,7 +214,7 @@ export async function GET(req: Request) {
     const pMonth = month === 1 ? 12 : month - 1;
     const pStart = new Date(pYear, pMonth - 1, 1);
     const pEnd   = new Date(pYear, pMonth, 1);
-    const rows   = await prisma.dataBulanan.findMany({ where: { periode: { gte: pStart, lt: pEnd } } });
+    const rows   = await prisma.dataBulanan.findMany({ where: { workspaceId: wsId, periode: { gte: pStart, lt: pEnd } } });
     prevKpiRows     = rows.map(mapRow);
     comparisonLabel = `vs ${MO_FULL_ID[pMonth - 1]} ${pYear}`;
     prevSampleStart = pStart;
@@ -230,6 +234,7 @@ export async function GET(req: Request) {
 
   // ── 7. Hall of Fame ────────────────────────────────────────────────────────
   const allBulanan = await prisma.dataBulanan.findMany({
+    where: { workspaceId: wsId },
     select: { creatorUsername: true, affiliateGmv: true },
   });
   const lifetimeGmv: Record<string, number> = {};
@@ -241,7 +246,7 @@ export async function GET(req: Request) {
   // ── 8. Visual Take lookup ──────────────────────────────────────────────────
   const usernamesForVT = [...new Set([...top10Raw.map(([u]) => u), ...hofRaw.map(([u]) => u)])];
   const vtRows = await prisma.databaseAffiliate.findMany({
-    where: { tiktokUsername: { in: usernamesForVT } },
+    where: { workspaceId: wsId, tiktokUsername: { in: usernamesForVT } },
     select: { tiktokUsername: true, visualTake: true },
   });
   const vtMap: Record<string, string> = {};
@@ -259,7 +264,7 @@ export async function GET(req: Request) {
     by: ["periode"],
     _sum: { affiliateGmv: true, affiliateLiveGmv: true, affiliateVideoGmv: true, affiliateOrders: true },
     _count: { creatorUsername: true },
-    where: { periode: { gte: yearStart, lt: yearEnd } },
+    where: { workspaceId: wsId, periode: { gte: yearStart, lt: yearEnd } },
     orderBy: { periode: "asc" },
   });
 
@@ -268,7 +273,7 @@ export async function GET(req: Request) {
   const hppMap: Record<string, number> = {};
   for (const p of products) hppMap[p.nama.toLowerCase()] = p.hpp;
 
-  const hppCurrent = await sumHppSample(hppMap, monthStart, monthEnd);
+  const hppCurrent = await sumHppSample(hppMap, monthStart, monthEnd, wsId);
   const curBiaya   = kpi.totalCommission + hppCurrent;
   const financial  = {
     totalCommission: kpi.totalCommission,
@@ -280,7 +285,7 @@ export async function GET(req: Request) {
 
   let prevFinancial = null;
   if (comparisonLabel) {
-    const hppPrev  = await sumHppSample(hppMap, prevSampleStart, prevSampleEnd);
+    const hppPrev  = await sumHppSample(hppMap, prevSampleStart, prevSampleEnd, wsId);
     const prevBiaya = prevKpi.totalCommission + hppPrev;
     prevFinancial = {
       totalCommission: prevKpi.totalCommission,
@@ -293,9 +298,9 @@ export async function GET(req: Request) {
 
   // ── 11. Funnel ─────────────────────────────────────────────────────────────
   const [listingBulanIni, totalDatabase, databaseAktif] = await Promise.all([
-    prisma.listingAffiliate.count({ where: { createdAt: { gte: monthStart, lt: monthEnd } } }),
-    prisma.databaseAffiliate.count(),
-    prisma.databaseAffiliate.count({ where: { status: "Aktif" } }),
+    prisma.listingAffiliate.count({ where: { workspaceId: wsId, createdAt: { gte: monthStart, lt: monthEnd } } }),
+    prisma.databaseAffiliate.count({ where: { workspaceId: wsId } }),
+    prisma.databaseAffiliate.count({ where: { workspaceId: wsId, status: "Aktif" } }),
   ]);
 
   return NextResponse.json({

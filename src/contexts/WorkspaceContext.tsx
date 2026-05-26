@@ -74,6 +74,41 @@ export function WorkspaceProvider({
 
   const current = workspaces.find((w) => w.id === currentId) ?? workspaces[0] ?? null;
 
+  // ── Global fetch interceptor ────────────────────────────────────────────────
+  // Automatically injects X-Workspace-ID on every /api/ request so all pages
+  // benefit without needing individual wsFetch() calls.
+  useEffect(() => {
+    if (typeof window === "undefined" || !current?.id) return;
+    const wsId = current.id;
+
+    // Walk any existing patch chain to find the real native fetch
+    let native: typeof window.fetch = window.fetch;
+    while ((native as { __ws_native__?: typeof fetch }).__ws_native__) {
+      native = (native as { __ws_native__?: typeof fetch }).__ws_native__!;
+    }
+
+    const patched = function (
+      input: Parameters<typeof fetch>[0],
+      init:  Parameters<typeof fetch>[1] = {},
+    ) {
+      const url =
+        typeof input === "string" ? input :
+        input instanceof URL      ? input.href :
+        (input as Request).url;
+      if (url.startsWith("/api/")) {
+        const headers = new Headers(init?.headers);
+        if (!headers.has("x-workspace-id"))
+          headers.set("x-workspace-id", String(wsId));
+        return native(input, { ...init, headers });
+      }
+      return native(input, init);
+    } as typeof window.fetch;
+
+    (patched as { __ws_native__?: typeof fetch }).__ws_native__ = native;
+    window.fetch = patched;
+    return () => { window.fetch = native; };
+  }, [current?.id]);
+
   /** Fetch wrapper that injects X-Workspace-ID so API routes can guard by workspace */
   function wsFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
     const wsId = current?.id;

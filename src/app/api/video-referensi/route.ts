@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ export async function GET(req: Request) {
   const page        = parseInt(url.searchParams.get("page") || "1");
   const limit       = parseInt(url.searchParams.get("limit") || "24");
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const wsId = resolveWorkspaceId(req) ?? 1;
+  const where: Record<string, unknown> = { deletedAt: null, workspaceId: wsId };
   if (search)     where.usernameTiktok = { contains: search };
   if (visualTake) where.jenisVisualTake = visualTake;
   if (mediaFocus) where.mediaFocus = mediaFocus;
@@ -28,9 +30,9 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Analytics summary
+  // Analytics summary (scoped to workspace)
   const allActive = await prisma.videoReferensi.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, workspaceId: wsId },
     select: { gmv: true, jenisVisualTake: true, tags: true, views: true },
   });
 
@@ -64,11 +66,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const rawUsername = (body.usernameTiktok || "").replace(/^@/, "").trim();
 
   const item = await prisma.videoReferensi.create({
     data: {
+      workspaceId:    wsId,
       usernameTiktok: rawUsername,
       linkTiktok:     rawUsername ? `https://www.tiktok.com/@${rawUsername}` : "",
       linkVideo:      body.linkVideo || "",
