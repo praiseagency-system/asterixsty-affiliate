@@ -68,8 +68,8 @@ export async function sendSampleDeliveryWA(params: {
     phone = affiliate.noWhatsapp;
 
     // 2. Check WA connection (dynamic import avoids edge-runtime issues)
-    const { sendWAMessage, getWAState } = await import("@/lib/wa-client");
-    if (getWAState().status !== "connected") {
+    const { sendUnified, isAnySessionConnected } = await import("@/lib/wa-multi-client");
+    if (!isAnySessionConnected()) {
       return { waStatus: "no_wa", phone, submissionLink, waError: "WhatsApp tidak terhubung" };
     }
 
@@ -103,8 +103,8 @@ export async function sendSampleDeliveryWA(params: {
       footer: brand.waFooter,
     });
 
-    // 6. Send
-    const result = await sendWAMessage(phone, msg);
+    // 6. Send (use unified sender — picks default/healthiest session automatically)
+    const result = await sendUnified(phone, msg);
     waStatus = result.ok ? "sent" : "failed";
     waError = result.error || "";
 

@@ -1,49 +1,46 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { getWAState } from "@/lib/wa-client";
-import { getAllMultiSessionStates, connectMultiSession, type WaMultiState } from "@/lib/wa-multi-client";
+import {
+  getAllMultiSessionStates,
+  connectMultiSession,
+  type WaMultiState,
+} from "@/lib/wa-multi-client";
 
 export const dynamic = "force-dynamic";
 
-function legacyStatusToMulti(status: string): WaMultiState["status"] {
-  switch (status) {
-    case "connected":    return "CONNECTED";
-    case "connecting":   return "CONNECTING";
-    case "qr_ready":     return "QR_READY";
-    case "reconnecting": return "RECONNECTING";
-    default:             return "DISCONNECTED";
-  }
-}
-
-// GET /api/wa-sessions
+// ── GET /api/wa-sessions ──────────────────────────────────────────────────────
+// Returns all sessions merged with in-memory state.
+// Also auto-seeds session 1 (Primary) if no sessions exist in DB.
 export async function GET() {
   const prisma = getPrisma();
   try {
-    const sessions = await prisma.whatsappSession.findMany({
+    let sessions = await prisma.whatsappSession.findMany({
       orderBy: { id: "asc" },
     });
 
-    const multiStates = getAllMultiSessionStates();
-    const stateMap = new Map(multiStates.map((s) => [s.sessionId, s]));
+    // Auto-seed session 1 (Primary) on first run
+    if (sessions.length === 0) {
+      const seed = await prisma.whatsappSession.create({
+        data: {
+          id:         1,
+          name:       "WhatsApp Utama",
+          isDefault:  true,
+          isActive:   true,
+          dailyLimit: 200,
+          status:     "DISCONNECTED",
+        },
+      });
+      sessions = [seed];
+    }
 
-    const waState = getWAState();
+    const multiStates = getAllMultiSessionStates();
+    const stateMap    = new Map(multiStates.map((s) => [s.sessionId, s]));
 
     const result = sessions.map((s) => {
-      if (s.id === 1) {
-        return {
-          ...s,
-          status:      legacyStatusToMulti(waState.status),
-          qrDataUrl:   waState.qrDataUrl,
-          phone:       waState.phone ?? s.phone,
-          connectedAt: waState.connectedAt,
-          error:       waState.error,
-        };
-      }
-
       const mem = stateMap.get(s.id);
       return {
         ...s,
-        status:      mem?.status      ?? s.status as WaMultiState["status"],
+        status:      (mem?.status ?? s.status) as WaMultiState["status"],
         qrDataUrl:   mem?.qrDataUrl   ?? null,
         phone:       mem?.phone       ?? s.phone,
         connectedAt: mem?.connectedAt ?? null,
@@ -58,7 +55,7 @@ export async function GET() {
   }
 }
 
-// POST /api/wa-sessions
+// ── POST /api/wa-sessions ─────────────────────────────────────────────────────
 export async function POST(req: Request) {
   const prisma = getPrisma();
   try {
@@ -76,20 +73,13 @@ export async function POST(req: Request) {
     }
 
     const created = await prisma.whatsappSession.create({
-      data: {
-        name,
-        dailyLimit,
-        isDefault,
-        status: "DISCONNECTED",
-      },
+      data: { name, dailyLimit, isDefault, status: "DISCONNECTED" },
     });
 
-    // Connect in background (don't await)
-    if (created.id > 1) {
-      connectMultiSession(created.id).catch((err) =>
-        console.error(`[wa-sessions] Background connect session ${created.id} failed:`, err)
-      );
-    }
+    // Trigger connect (non-blocking) — will show QR
+    connectMultiSession(created.id).catch((err) =>
+      console.error(`[wa-sessions] Background connect session ${created.id} failed:`, err)
+    );
 
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { getWAState } from "@/lib/wa-client";
+import { isAnySessionConnected, getPrimaryPhone } from "@/lib/wa-multi-client";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +39,10 @@ export async function POST(req: Request) {
     const message = String(body.message || "").trim();
     if (!message) return NextResponse.json({ error: "Pesan tidak boleh kosong" }, { status: 400 });
 
-    // Validate WA connection
-    const waState = getWAState();
-    if (waState.status !== "connected") {
+    // Validate WA connection — any session must be connected
+    if (!isAnySessionConnected()) {
       return NextResponse.json(
-        { error: "WhatsApp belum terhubung. Hubungkan WA terlebih dahulu di Automation Center." },
+        { error: "WhatsApp belum terhubung. Hubungkan minimal satu akun di Automation Center." },
         { status: 422 }
       );
     }
@@ -59,7 +58,7 @@ export async function POST(req: Request) {
       ? (body.senderSessionIds as number[]).filter((n) => !isNaN(Number(n))).map(Number)
       : [];
     // Auto-use connected phone if sender not supplied
-    const senderNumber = String(body.senderNumber || waState.phone || "").trim();
+    const senderNumber = String(body.senderNumber || getPrimaryPhone() || "").trim();
     const scheduledAt  = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
     const campaignId   = body.campaignId ? Number(body.campaignId) : null;
     const campaignName = String(body.campaignName || "").trim();

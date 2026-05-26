@@ -3,7 +3,7 @@
  * fills templates, sends via WhatsApp, and logs results.
  */
 import { prisma } from "@/lib/prisma";
-import { sendWAMessage, getWAState } from "@/lib/wa-client";
+import { sendUnified, isAnySessionConnected } from "@/lib/wa-multi-client";
 import type { DeadlineConfig } from "@/app/api/admin/config/route";
 
 // ── Deadline helpers (mirrors sample-delivery/page.tsx) ───────────────────────
@@ -159,9 +159,8 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
     return result;
   }
 
-  // 2. Check WA connection
-  const waState = getWAState();
-  if (waState.status !== "connected") {
+  // 2. Check WA connection — any session must be connected
+  if (!isAnySessionConnected()) {
     result.errors.push("WhatsApp tidak terhubung, reminder ditunda.");
     return result;
   }
@@ -246,7 +245,7 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
             hari_terlambat: "",
             submission_link: submissionUrl(delivery.id),
           });
-          const { ok, error } = await sendWAMessage(phone, pesan);
+          const { ok, error } = await sendUnified(phone, pesan);
           await logReminder({
             deliveryId: delivery.id,
             username: delivery.affiliateUsername,
@@ -291,7 +290,7 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
             pic,
             hari_terlambat: "",
           });
-          const { ok, error } = await sendWAMessage(phone, pesan);
+          const { ok, error } = await sendUnified(phone, pesan);
           await logReminder({
             deliveryId: delivery.id,
             username: delivery.affiliateUsername,
@@ -329,7 +328,7 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
             hari_terlambat: String(daysPastFinal),
             submission_link: submissionUrl(delivery.id),
           });
-          const { ok, error } = await sendWAMessage(phone, pesan);
+          const { ok, error } = await sendUnified(phone, pesan);
           await logReminder({
             deliveryId: delivery.id,
             username: delivery.affiliateUsername,
@@ -365,7 +364,7 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
             hari_terlambat: String(daysPastFinal),
             submission_link: submissionUrl(delivery.id),
           });
-          const { ok, error } = await sendWAMessage(phone, pesan);
+          const { ok, error } = await sendUnified(phone, pesan);
           await logReminder({
             deliveryId: delivery.id,
             username: delivery.affiliateUsername,

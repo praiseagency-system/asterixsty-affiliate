@@ -37,6 +37,7 @@ interface WaQueueItem {
   recipientName: string; tiktokUsername: string; campaignId: number | null;
   campaignName: string; delayMode: string; status: string; attempts: number;
   errorReason: string; sentAt: string | null; createdAt: string;
+  senderPhone: string; senderSessionId: number | null;
 }
 interface QueueSummary { pending: number; processing: number; success: number; failed: number; retry: number; }
 interface AutoLogEntry {
@@ -1104,8 +1105,8 @@ function BroadcastPageInner() {
   async function handleSend() {
     if (!message.trim()) { showToast("⚠️ Pesan tidak boleh kosong"); return; }
     if (!recipients || recipients.withWA === 0) { showToast("⚠️ Tidak ada penerima dengan nomor WA"); return; }
-    if (waStatus.status !== "connected") {
-      showToast("⚠️ WhatsApp belum terhubung. Hubungkan WA di Automation Center terlebih dahulu.");
+    if (!availSessions.some((s) => s.status === "CONNECTED")) {
+      showToast("⚠️ WhatsApp belum terhubung. Hubungkan minimal satu akun di Automation Center.");
       return;
     }
 
@@ -1316,7 +1317,7 @@ function BroadcastPageInner() {
     await loadQueue(broadcastId);
   }
 
-  const waConnected  = waStatus.status === "connected";
+  const waConnected  = availSessions.some((s) => s.status === "CONNECTED") || waStatus.status === "connected";
   const canSend = message.trim() && recipients && recipients.withWA > 0 && waConnected;
 
   return (
@@ -1758,6 +1759,7 @@ function BroadcastPageInner() {
                   <tr className="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                     <th className="text-left px-5 py-3">Penerima</th>
                     <th className="text-left px-3 py-3">Nomor WA</th>
+                    <th className="text-left px-3 py-3">Sender</th>
                     <th className="text-left px-3 py-3">Status</th>
                     <th className="text-left px-3 py-3">Waktu Kirim</th>
                     <th className="text-left px-3 py-3">Keterangan</th>
@@ -1774,6 +1776,24 @@ function BroadcastPageInner() {
                         </td>
                         <td className="px-3 py-3">
                           <span className="font-mono text-xs text-gray-600">{item.phone}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          {item.senderPhone || item.senderSessionId ? (
+                            <div className="text-xs">
+                              {(() => {
+                                const sess = availSessions.find((s) => s.id === item.senderSessionId);
+                                return sess ? (
+                                  <span className="text-gray-700 font-medium">{sess.name}</span>
+                                ) : item.senderPhone ? (
+                                  <span className="font-mono text-gray-500">+{item.senderPhone}</span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${m.bg} ${m.text}`}>

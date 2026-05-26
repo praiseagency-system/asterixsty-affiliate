@@ -1,33 +1,19 @@
 import { NextResponse } from "next/server";
-import { getPrisma } from "@/lib/prisma";
-import { disconnectWA } from "@/lib/wa-client";
 import { disconnectMultiSession } from "@/lib/wa-multi-client";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/wa-sessions/[id]/disconnect
+// POST /api/wa-sessions/[id]/disconnect — all sessions use multi-client
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: idStr } = await params;
-  const id     = Number(idStr);
-  const prisma = getPrisma();
+  const id = Number(idStr);
 
   try {
-    if (id === 1) {
-      await disconnectWA();
-    } else {
-      await disconnectMultiSession(id);
-    }
-
-    try {
-      await prisma.whatsappSession.update({
-        where: { id },
-        data:  { status: "DISCONNECTED" },
-      });
-    } catch { /* session may not exist in DB */ }
-
+    // disconnectMultiSession handles DB update + socket cleanup for all sessions
+    await disconnectMultiSession(id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(`[POST wa-sessions/${id}/disconnect]`, err);

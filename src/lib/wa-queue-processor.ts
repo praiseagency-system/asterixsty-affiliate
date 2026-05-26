@@ -1,7 +1,8 @@
 /**
  * Shared WA Queue Processor.
- * Reads pending WaMessageQueue entries and sends them via the existing
- * sendWAMessage function from wa-client (same session used for reminders).
+ * Reads pending WaMessageQueue entries and sends via the unified multi-session
+ * sender system. Every session (including session 1 / primary) is routed
+ * through wa-multi-client.ts — there is no longer a separate legacy path.
  *
  * Called by:
  *   - Scheduler (every 2 minutes, processes a small batch)
@@ -9,8 +10,12 @@
  */
 
 import { getPrisma } from "@/lib/prisma";
-import { sendWAMessage, getWAState } from "@/lib/wa-client";
-import { sendViaMultiSession } from "@/lib/wa-multi-client";
+import { getWAState } from "@/lib/wa-client";
+import {
+  sendViaMultiSession,
+  pickBestSession,
+  isAnySessionConnected,
+} from "@/lib/wa-multi-client";
 
 export interface ProcessResult {
   processed:   number;
@@ -50,7 +55,7 @@ export async function processWaQueue(
   broadcastId?: number,
 ): Promise<ProcessResult> {
   const prisma = getPrisma();
-  const state  = getWAState();
+  const waState = getWAState(); // Used only for the legacy waConnected field in result
 
   const queueWhere = {
     status: { in: ["pending" as const, "retry" as const] },
@@ -60,7 +65,7 @@ export async function processWaQueue(
 
   const remaining = await prisma.waMessageQueue.count({ where: queueWhere });
 
-  if (!state || state.status !== "connected") {
+  if (!isAnySessionConnected()) {
     return {
       processed:   0,
       success:     0,
@@ -70,7 +75,7 @@ export async function processWaQueue(
       waConnected: false,
       nextDelayMs: 0,
       delayMode:   "Normal",
-      error: "WhatsApp tidak terhubung. Hubungkan WA terlebih dahulu di Automation Center.",
+      error: "WhatsApp tidak terhubung. Hubungkan minimal satu akun di Automation Center.",
     };
   }
 
@@ -82,7 +87,6 @@ export async function processWaQueue(
 
   let success = 0, failed = 0, skipped = 0;
 
-  // Track last-processed info to return to caller (used by client-driven loop)
   let lastDelayMs   = 30_000;
   let lastDelayMode = "Normal";
   let lastRecipient: ProcessResult["lastRecipient"] | undefined;
@@ -106,17 +110,60 @@ export async function processWaQueue(
       data:  { status: "processing", attempts: item.attempts + 1 },
     });
 
+    // ── Resolve sender ─────────────────────────────────────────────────────
+    // All sessions (including 1) go through sendViaMultiSession.
+    // If the assigned session is unavailable, fall back to any healthy session.
     let result: { ok: boolean; error?: string };
-    if (item.senderSessionId && item.senderSessionId > 1) {
-      result = await sendViaMultiSession(item.senderSessionId, item.phone, item.message);
+    let usedSessionId: number | null = item.senderSessionId ?? null;
+
+    if (usedSessionId) {
+      result = await sendViaMultiSession(usedSessionId, item.phone, item.message);
+
+      // Fallback: assigned session failed → try any healthy session
+      if (!result.ok) {
+        const fallbackId = await pickBestSession(); // pick from all active sessions
+        if (fallbackId && fallbackId !== usedSessionId) {
+          const fallbackResult = await sendViaMultiSession(fallbackId, item.phone, item.message);
+          if (fallbackResult.ok) {
+            result = fallbackResult;
+            usedSessionId = fallbackId;
+          }
+        }
+      }
     } else {
-      result = await sendWAMessage(item.phone, item.message);
+      // No session assigned: pick best available
+      const bestId = await pickBestSession();
+      if (bestId) {
+        result = await sendViaMultiSession(bestId, item.phone, item.message);
+        usedSessionId = bestId;
+      } else {
+        result = { ok: false, error: "Tidak ada WhatsApp yang terhubung" };
+      }
     }
+    // ─────────────────────────────────────────────────────────────────────
 
     if (result.ok) {
+      // Resolve sender phone for logging
+      let senderPhone = item.senderPhone || waState.phone || "";
+      if (usedSessionId) {
+        try {
+          const sess = await prisma.whatsappSession.findUnique({
+            where:  { id: usedSessionId },
+            select: { phone: true },
+          });
+          if (sess?.phone) senderPhone = sess.phone;
+        } catch { /* ignore */ }
+      }
+
       await prisma.waMessageQueue.update({
         where: { id: item.id },
-        data:  { status: "success", sentAt: new Date(), errorReason: "", senderPhone: item.senderPhone || state.phone || "" },
+        data:  {
+          status:      "success",
+          sentAt:      new Date(),
+          errorReason: "",
+          senderPhone,
+          ...(usedSessionId ? { senderSessionId: usedSessionId } : {}),
+        },
       });
       success++;
       lastRecipient = { name: item.recipientName ?? "", phone: item.phone, status: "success" };
@@ -191,7 +238,7 @@ export async function processWaQueue(
     failed,
     skipped,
     remaining:     newRemaining,
-    waConnected:   true,
+    waConnected:   isAnySessionConnected(),
     nextDelayMs:   lastDelayMs,
     delayMode:     lastDelayMode,
     lastRecipient,

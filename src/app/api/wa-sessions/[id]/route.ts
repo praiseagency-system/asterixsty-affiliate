@@ -1,19 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { getWAState } from "@/lib/wa-client";
 import { getMultiSessionState, disconnectMultiSession, type WaMultiState } from "@/lib/wa-multi-client";
 
 export const dynamic = "force-dynamic";
-
-function legacyStatusToMulti(status: string): WaMultiState["status"] {
-  switch (status) {
-    case "connected":    return "CONNECTED";
-    case "connecting":   return "CONNECTING";
-    case "qr_ready":     return "QR_READY";
-    case "reconnecting": return "RECONNECTING";
-    default:             return "DISCONNECTED";
-  }
-}
 
 // GET /api/wa-sessions/[id]
 export async function GET(
@@ -30,22 +19,11 @@ export async function GET(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    if (id === 1) {
-      const waState = getWAState();
-      return NextResponse.json({
-        ...session,
-        status:      legacyStatusToMulti(waState.status),
-        qrDataUrl:   waState.qrDataUrl,
-        phone:       waState.phone ?? session.phone,
-        connectedAt: waState.connectedAt,
-        error:       waState.error,
-      });
-    }
-
+    // All sessions (including 1) use multi-client state
     const mem = getMultiSessionState(id);
     return NextResponse.json({
       ...session,
-      status:      mem?.status      ?? session.status as WaMultiState["status"],
+      status:      (mem?.status      ?? session.status) as WaMultiState["status"],
       qrDataUrl:   mem?.qrDataUrl   ?? null,
       phone:       mem?.phone       ?? session.phone,
       connectedAt: mem?.connectedAt ?? null,

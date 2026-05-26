@@ -8,20 +8,15 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const { initScheduler } = await import("@/lib/scheduler");
-  const { connectWA } = await import("@/lib/wa-client");
-
   initScheduler();
 
-  // Auto-reconnect WA if a session file exists
-  const fs = await import("fs");
-  const path = await import("path");
-  const sessionDir = path.join(process.cwd(), ".wa-session");
-  if (fs.existsSync(sessionDir)) {
-    try {
-      await connectWA();
-    } catch (err) {
-      console.warn("[Instrumentation] WA auto-connect failed:", err);
-    }
+  // Auto-reconnect ALL active WA sessions that have auth files on disk.
+  // This covers session 1 (primary) AND any additional sender sessions.
+  try {
+    const { autoReconnectAllSessions } = await import("@/lib/wa-multi-client");
+    await autoReconnectAllSessions();
+  } catch (err) {
+    console.warn("[Instrumentation] WA auto-reconnect failed:", err);
   }
 
   // ── Google Form background auto-sync ───────────────────────────────────────
