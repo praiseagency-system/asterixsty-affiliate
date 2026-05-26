@@ -68,16 +68,22 @@ export async function POST(req: Request) {
       try { return JSON.parse(targetJson) as {
         type?: string; groups?: string[]; categories?: string[];
         visualTakes?: string[]; manualSearch?: string;
+        manualIds?: number[]; excludeIds?: number[];
       }; } catch { return { type: "All" }; }
     })();
 
     // Build Prisma where for recipients
     const where: Record<string, unknown> = { deletedAt: null, status: "Aktif" };
-    if (target.type === "Manual" && target.manualSearch) {
-      where.OR = [
-        { tiktokUsername: { contains: target.manualSearch } },
-        { namaAffiliator: { contains: target.manualSearch } },
-      ];
+    if (target.type === "Manual") {
+      if (target.manualIds?.length) {
+        // Explicit ID list takes priority over text search
+        where.id = { in: target.manualIds };
+      } else if (target.manualSearch) {
+        where.OR = [
+          { tiktokUsername: { contains: target.manualSearch } },
+          { namaAffiliator: { contains: target.manualSearch } },
+        ];
+      }
     } else {
       const conditions: Record<string, unknown>[] = [];
       if (target.groups?.length) {
@@ -90,6 +96,14 @@ export async function POST(req: Request) {
         conditions.push({ OR: target.visualTakes.map((v: string) => ({ visualTake: { contains: v } })) });
       }
       if (conditions.length > 0) where.AND = conditions;
+    }
+
+    // Apply excludeIds — remove specific creators from any target type
+    if (target.excludeIds?.length) {
+      const existing = where.id as { in?: number[]; notIn?: number[] } | undefined;
+      where.id = existing
+        ? { ...existing, notIn: target.excludeIds }
+        : { notIn: target.excludeIds };
     }
 
     const affiliates = await prisma.databaseAffiliate.findMany({

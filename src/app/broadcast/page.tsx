@@ -354,6 +354,123 @@ interface TargetConfig {
   categories: string[];
   visualTakes: string[];
   manualSearch: string;
+  manualIds: number[];    // selected affiliate IDs in Manual include mode
+  excludeIds: number[];   // affiliate IDs to always exclude (any mode)
+}
+
+// ─── Affiliate Picker List ────────────────────────────────────────────────────
+interface AffiliatePick {
+  id: number; username: string; nama: string; wa: string; kategori: string; vt: string;
+}
+
+function AffiliatePickerList({
+  selectedIds, onToggle, onSelectAll, onClearAll, accent = "indigo",
+}: {
+  selectedIds: number[];
+  onToggle:    (a: AffiliatePick) => void;
+  onSelectAll: (items: AffiliatePick[]) => void;
+  onClearAll:  () => void;
+  accent?:     "indigo" | "red";
+}) {
+  const [search,   setSearch]   = useState("");
+  const [list,     setList]     = useState<AffiliatePick[]>([]);
+  const [loading,  setLoading]  = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ type: "All", limit: "300" });
+        if (search.trim()) params.set("search", search.trim());
+        const res = await fetch(`/api/broadcast/recipients?${params}`);
+        if (res.ok && active) {
+          const d = await res.json() as { affiliates?: AffiliatePick[] };
+          setList(Array.isArray(d.affiliates) ? d.affiliates : []);
+        }
+      } finally { if (active) setLoading(false); }
+    }, 300);
+    return () => { active = false; clearTimeout(t); };
+  }, [search]);
+
+  const selSet   = new Set(selectedIds);
+  const waCount  = list.filter((a) => selSet.has(a.id) && a.wa).length;
+  const chkCls   = accent === "indigo" ? "bg-indigo-600 border-indigo-600" : "bg-red-500 border-red-500";
+  const rowSelCls= accent === "indigo" ? "bg-indigo-50/60" : "bg-red-50/40";
+
+  return (
+    <div className="space-y-2">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {selectedIds.length > 0 && (
+          <p className={`text-xs font-semibold ${accent === "indigo" ? "text-indigo-600" : "text-red-600"}`}>
+            {selectedIds.length} dipilih{waCount > 0 ? ` · ${waCount} punya WA ✓` : ""}
+          </p>
+        )}
+        <div className="flex items-center gap-3 ml-auto">
+          <button onClick={() => onSelectAll(list)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+            ☑ Pilih Semua ({list.length})
+          </button>
+          <button onClick={onClearAll}
+            className="text-xs text-gray-400 hover:text-red-500 font-medium transition-colors">
+            🗑 Hapus Semua
+          </button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="🔍 Cari username, nama, kategori, WA..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+
+      {/* List */}
+      <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50 bg-white">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-8">
+            <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-gray-400">Memuat...</span>
+          </div>
+        ) : list.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-8">Tidak ada affiliate yang ditemukan</p>
+        ) : list.map((a) => {
+          const checked = selSet.has(a.id);
+          return (
+            <button key={a.id} onClick={() => onToggle(a)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-gray-50 ${checked ? rowSelCls : ""}`}>
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${checked ? chkCls : "border-gray-300"}`}>
+                {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-semibold text-gray-800 truncate">@{a.username || "—"}</span>
+                  {a.nama && a.nama !== a.username && (
+                    <span className="text-xs text-gray-400 truncate">· {a.nama}</span>
+                  )}
+                </div>
+                {(a.kategori || a.vt) && (
+                  <p className="text-[10px] text-gray-400 truncate">{[a.kategori, a.vt].filter(Boolean).join(" · ")}</p>
+                )}
+              </div>
+              {a.wa
+                ? <span className="text-[10px] text-emerald-600 font-bold shrink-0">✓ WA</span>
+                : <span className="text-[10px] text-gray-300 shrink-0">no WA</span>
+              }
+            </button>
+          );
+        })}
+      </div>
+      {list.length >= 300 && (
+        <p className="text-[10px] text-gray-400 text-center">
+          Menampilkan 300 pertama — gunakan search untuk filter lebih spesifik
+        </p>
+      )}
+    </div>
+  );
 }
 
 function TargetingPanel({ config, onChange, groups, categories, recipients, loadingRecipients }: {
@@ -364,9 +481,10 @@ function TargetingPanel({ config, onChange, groups, categories, recipients, load
   recipients: RecipientPreview | null;
   loadingRecipients: boolean;
 }) {
-  const [groupSearch, setGroupSearch]   = useState("");
-  const [catSearch, setCatSearch]       = useState("");
-  const [vtSearch, setVtSearch]         = useState("");
+  const [groupSearch,  setGroupSearch]  = useState("");
+  const [catSearch,    setCatSearch]    = useState("");
+  const [vtSearch,     setVtSearch]     = useState("");
+  const [showExclude,  setShowExclude]  = useState(false);
 
   function setType(t: TargetConfig["type"]) { onChange({ ...config, type: t }); }
   function toggleGroup(name: string) {
@@ -514,13 +632,71 @@ function TargetingPanel({ config, onChange, groups, categories, recipients, load
 
       {config.type === "Manual" && (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">Cari affiliate berdasarkan username, nama, atau nomor WA</p>
-          <input type="text" placeholder="Ketik username atau nama untuk cari..."
-            value={config.manualSearch}
-            onChange={(e) => onChange({ ...config, manualSearch: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <p className="text-xs text-gray-500">
+            Pilih creator satu per satu — hanya yang dicentang yang akan menerima broadcast
+          </p>
+          <AffiliatePickerList
+            selectedIds={config.manualIds}
+            onToggle={(a) => {
+              const next = config.manualIds.includes(a.id)
+                ? config.manualIds.filter((id) => id !== a.id)
+                : [...config.manualIds, a.id];
+              onChange({ ...config, manualIds: next });
+            }}
+            onSelectAll={(items) => {
+              const merged = Array.from(new Set([...config.manualIds, ...items.map((a) => a.id)]));
+              onChange({ ...config, manualIds: merged });
+            }}
+            onClearAll={() => onChange({ ...config, manualIds: [] })}
+            accent="indigo"
+          />
+          {config.manualIds.length === 0 && (
+            <p className="text-xs text-amber-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              ⚠️ Centang minimal 1 creator untuk broadcast
+            </p>
+          )}
         </div>
       )}
+
+      {/* Exclude section — available for all target modes */}
+      <div className="border border-gray-100 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowExclude((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+          <div className="flex items-center gap-2">
+            <span>🚫</span>
+            <span className="text-sm font-semibold text-gray-700">Kecualikan creator tertentu</span>
+            {config.excludeIds.length > 0 && (
+              <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">
+                {config.excludeIds.length} dikecualikan
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-xs">{showExclude ? "▲" : "▼"}</span>
+        </button>
+        {showExclude && (
+          <div className="px-4 py-3 border-t border-gray-100 space-y-3">
+            <p className="text-xs text-gray-500">
+              Creator yang dicentang di sini <strong>tidak akan</strong> menerima broadcast, meskipun masuk dalam filter target di atas.
+            </p>
+            <AffiliatePickerList
+              selectedIds={config.excludeIds}
+              onToggle={(a) => {
+                const next = config.excludeIds.includes(a.id)
+                  ? config.excludeIds.filter((id) => id !== a.id)
+                  : [...config.excludeIds, a.id];
+                onChange({ ...config, excludeIds: next });
+              }}
+              onSelectAll={(items) => {
+                const merged = Array.from(new Set([...config.excludeIds, ...items.map((a) => a.id)]));
+                onChange({ ...config, excludeIds: merged });
+              }}
+              onClearAll={() => onChange({ ...config, excludeIds: [] })}
+              accent="red"
+            />
+          </div>
+        )}
+      </div>
 
       {/* Live Preview */}
       <div className={`rounded-xl border p-4 transition-all ${loadingRecipients ? "border-gray-100 bg-gray-50" : recipients && recipients.total > 0 ? "border-indigo-100 bg-indigo-50" : "border-gray-100 bg-gray-50"}`}>
@@ -557,6 +733,11 @@ function TargetingPanel({ config, onChange, groups, categories, recipients, load
                 ))}
                 {recipients.total > 5 && <p className="text-xs text-gray-400">...dan {recipients.total - 5} lainnya</p>}
               </div>
+            )}
+            {config.excludeIds.length > 0 && (
+              <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-1.5">
+                🚫 {config.excludeIds.length} creator dikecualikan
+              </p>
             )}
             {recipients.total === 0 && (
               <p className="text-sm text-gray-400 text-center py-2">Tidak ada affiliate yang sesuai filter</p>
@@ -953,7 +1134,8 @@ function BroadcastPageInner() {
   const [jobs, setJobs]               = useState<BroadcastJob[]>([]);
 
   const [targetConfig, setTargetConfig] = useState<TargetConfig>({
-    type: "All", groups: [], categories: [], visualTakes: [], manualSearch: "",
+    type: "All", groups: [], categories: [], visualTakes: [],
+    manualSearch: "", manualIds: [], excludeIds: [],
   });
   const [recipients, setRecipients]       = useState<RecipientPreview | null>(null);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
@@ -1092,10 +1274,12 @@ function BroadcastPageInner() {
     const t = setTimeout(async () => {
       setLoadingRecipients(true);
       try {
-        const params = new URLSearchParams({ type: targetConfig.type, preview: "true" });
+        const params = new URLSearchParams({ type: targetConfig.type });
         if (targetConfig.groups.length)      params.set("groups",      targetConfig.groups.join(","));
         if (targetConfig.categories.length)  params.set("categories",  targetConfig.categories.join(","));
         if (targetConfig.visualTakes.length) params.set("visualTakes", targetConfig.visualTakes.join(","));
+        if (targetConfig.manualIds.length)   params.set("manualIds",   targetConfig.manualIds.join(","));
+        if (targetConfig.excludeIds.length)  params.set("excludeIds",  targetConfig.excludeIds.join(","));
         if (targetConfig.manualSearch)       params.set("search",      targetConfig.manualSearch);
         const res = await fetch(`/api/broadcast/recipients?${params}`);
         if (res.ok) { const d = await res.json() as RecipientPreview; setRecipients(d); }
@@ -1117,11 +1301,13 @@ function BroadcastPageInner() {
   // Build target JSON for API
   function buildTargetJson() {
     return JSON.stringify({
-      type:        targetConfig.type,
-      groups:      targetConfig.groups,
-      categories:  targetConfig.categories,
-      visualTakes: targetConfig.visualTakes,
+      type:         targetConfig.type,
+      groups:       targetConfig.groups,
+      categories:   targetConfig.categories,
+      visualTakes:  targetConfig.visualTakes,
       manualSearch: targetConfig.manualSearch,
+      manualIds:    targetConfig.manualIds,
+      excludeIds:   targetConfig.excludeIds,
     });
   }
 
@@ -1195,6 +1381,8 @@ function BroadcastPageInner() {
         categories:   t.categories  || [],
         visualTakes:  t.visualTakes || [],
         manualSearch: t.manualSearch || "",
+        manualIds:    t.manualIds   || [],
+        excludeIds:   t.excludeIds  || [],
       });
       showToast(`✅ Preset "${p.name}" dimuat`);
       setShowPresetsPanel(false);
@@ -1608,7 +1796,14 @@ function BroadcastPageInner() {
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Ringkasan Broadcast</p>
               <div className="grid grid-cols-2 gap-y-2 text-sm">
                 <span className="text-gray-400">Target</span>
-                <span className="font-medium text-gray-800">{targetConfig.type === "All" ? "Semua affiliate" : targetConfig.type}</span>
+                <span className="font-medium text-gray-800">
+                  {targetConfig.type === "Manual"
+                    ? `${targetConfig.manualIds.length} creator dipilih`
+                    : targetConfig.type === "All" ? "Semua affiliate" : targetConfig.type}
+                  {targetConfig.excludeIds.length > 0 && (
+                    <span className="ml-1 text-red-500 text-xs">(-{targetConfig.excludeIds.length})</span>
+                  )}
+                </span>
                 <span className="text-gray-400">Penerima WA</span>
                 <span className={`font-bold ${recipients && recipients.withWA > 0 ? "text-emerald-600" : "text-gray-400"}`}>
                   {recipients ? recipients.withWA : "—"}
