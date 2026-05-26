@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +33,10 @@ export async function GET(req: Request) {
 // Body: { email, role, workspaceIds: number[] }
 //   OR  { email, role, workspaceId: number }  ← legacy single-workspace format
 //
-// Bug fix: Prisma has @@unique([workspaceId, userId]). When userId = "" every
-// pending invite in the same workspace collides. We now use a unique placeholder
-// ("invite_<uuid>") so the constraint never fires. auth.ts signIn clears it by
-// matching inviteEmail+status instead of userId="".
+// Pending invites use userId = null so:
+//   1. No FK violation (PostgreSQL skips FK check for NULL)
+//   2. No @@unique([workspaceId, userId]) collision (NULL != NULL in SQL)
+// auth.ts signIn clears it by matching inviteEmail + status = "invited".
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -63,6 +62,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "at least one workspaceId required" }, { status: 400 });
   }
 
+  console.log("[POST workspace/members] invite payload:", { email, role, workspaceIds: rawIds });
+
   // ── For each workspace: check permission, then upsert member ────────────────
   const results: { workspaceId: number; ok: boolean; error?: string }[] = [];
 
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
       where: { workspaceId, userId: session.user.id, status: "active", role: { in: ["OWNER", "ADMIN"] } },
     });
     if (!selfMember) {
+      console.warn("[POST workspace/members] Forbidden: userId=%s not OWNER/ADMIN in ws=%d", session.user.id, workspaceId);
       results.push({ workspaceId, ok: false, error: "Forbidden" });
       continue;
     }
@@ -81,12 +83,13 @@ export async function POST(req: Request) {
       const existingUser = await prisma.user.findUnique({ where: { email } });
 
       if (existingUser) {
-        // User already has an account — upsert membership
+        // User already has an account — upsert membership directly as active
         await prisma.workspaceMember.upsert({
           where:  { workspaceId_userId: { workspaceId, userId: existingUser.id } },
           create: { workspaceId, userId: existingUser.id, inviteEmail: email, role, status: "active" },
           update: { role, status: "active" },
         });
+        console.log("[POST workspace/members] upserted existing user %s in ws=%d", email, workspaceId);
       } else {
         // User not registered yet — check for an existing pending invite for this email
         const existingInvite = await prisma.workspaceMember.findFirst({
@@ -99,29 +102,31 @@ export async function POST(req: Request) {
             where: { id: existingInvite.id },
             data:  { role },
           });
+          console.log("[POST workspace/members] updated existing invite for %s in ws=%d", email, workspaceId);
         } else {
-          // Fresh invite — use a unique placeholder userId to avoid the
-          // @@unique([workspaceId, userId]) constraint when userId = "".
+          // Fresh invite — userId = null avoids both the FK constraint and the
+          // @@unique([workspaceId, userId]) collision (SQL treats NULL != NULL).
           await prisma.workspaceMember.create({
             data: {
               workspaceId,
-              userId:      `invite_${randomUUID()}`,
+              userId:      null,
               inviteEmail: email,
               role,
               status:      "invited",
             },
           });
+          console.log("[POST workspace/members] created pending invite for %s in ws=%d", email, workspaceId);
         }
       }
 
       results.push({ workspaceId, ok: true });
     } catch (err) {
-      console.error("[POST workspace/members] workspaceId=", workspaceId, err);
-      results.push({ workspaceId, ok: false, error: "Internal error" });
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[POST workspace/members] workspaceId=%d error:", workspaceId, err);
+      results.push({ workspaceId, ok: false, error: message });
     }
   }
 
-  const anyOk    = results.some((r) => r.ok);
   const allFailed = results.every((r) => !r.ok);
 
   if (allFailed) {

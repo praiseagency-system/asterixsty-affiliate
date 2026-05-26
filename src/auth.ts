@@ -32,17 +32,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!user.id || !user.email) return;
 
       // ── Accept pending workspace invitations for this email ────────────────
-      // Pending invites now use a unique placeholder userId ("invite_<uuid>")
-      // to avoid the @@unique([workspaceId, userId]) constraint firing when
-      // multiple people are invited to the same workspace. We match on
-      // inviteEmail + status only (not userId = "") so all are picked up.
-      await prisma.workspaceMember.updateMany({
-        where: {
-          inviteEmail: user.email,
-          status:      "invited",
-        },
-        data: { userId: user.id, status: "active" },
+      // Pending invites use userId = null so the FK and @@unique constraints
+      // are never violated. On first login we flip them to active with the real
+      // userId. If a concurrent active row already exists for the same
+      // (workspaceId, userId) we skip that workspace rather than crash.
+      const pendingInvites = await prisma.workspaceMember.findMany({
+        where: { inviteEmail: user.email, status: "invited" },
       });
+      for (const invite of pendingInvites) {
+        try {
+          // Check if user is already an active member of this workspace
+          const existing = await prisma.workspaceMember.findFirst({
+            where: { workspaceId: invite.workspaceId, userId: user.id },
+          });
+          if (existing) {
+            // Already a member — just delete the stale pending invite
+            await prisma.workspaceMember.delete({ where: { id: invite.id } });
+          } else {
+            await prisma.workspaceMember.update({
+              where: { id: invite.id },
+              data:  { userId: user.id, status: "active" },
+            });
+          }
+        } catch (err) {
+          console.error("[signIn] Failed to accept invite id=%d:", invite.id, err);
+        }
+      }
 
       if (!isNewUser) return;
 

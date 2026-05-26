@@ -7,7 +7,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 interface Member {
   id:          number;
   workspaceId: number;
-  userId:      string;
+  userId:      string | null;
   inviteEmail: string;
   role:        string;
   status:      string;

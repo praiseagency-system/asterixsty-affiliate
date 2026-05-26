@@ -96,16 +96,19 @@ model Workspace {
 model WorkspaceMember {
   id            Int       @id @default(autoincrement())
   workspaceId   Int
-  userId        String    @default("") // filled on first login if invited by email
-  inviteEmail   String    @default("") // email used to invite (before they sign up)
-  role          String    @default("VIEWER") // OWNER | ADMIN | SPECIALIST | OPERATIONS | VIEWER
-  status        String    @default("active")  // active | invited | disabled
+  userId        String?                        // null for pending invites; filled on first login
+  inviteEmail   String    @default("")         // email used to invite (before they sign up)
+  role          String    @default("VIEWER")   // OWNER | ADMIN | SPECIALIST | OPERATIONS | VIEWER
+  status        String    @default("active")   // active | invited | disabled
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user          User?     @relation(fields: [userId], references: [id])
 
+  // NULL userId is allowed for pending invites; PostgreSQL treats NULL != NULL so
+  // multiple pending rows per workspace are fine. Duplicate active members are
+  // prevented by application logic (upsert when real user already exists).
   @@unique([workspaceId, userId])
 }
 
