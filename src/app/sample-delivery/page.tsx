@@ -1254,6 +1254,19 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
             <input type="number" min={0} max={20} className={inputCls} value={form.totalVideoTarget}
               onChange={e => set("totalVideoTarget", e.target.value)} />
           </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">PIC / Specialist</label>
+            <select
+              className={inputCls}
+              value={form.picId}
+              onChange={e => set("picId", e.target.value)}
+            >
+              <option value="">— Auto dari affiliate —</option>
+              {specialists.map(s => (
+                <option key={s.id} value={String(s.id)}>{s.nama}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Deadline preview */}
@@ -1270,24 +1283,6 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
             </div>
           </div>
         )}
-
-        {/* PIC Select */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1.5">PIC / Affiliate Specialist</label>
-          <select
-            className={inputCls}
-            value={form.picId}
-            onChange={e => set("picId", e.target.value)}
-          >
-            <option value="">— Otomatis dari data affiliate —</option>
-            {specialists.map(s => (
-              <option key={s.id} value={String(s.id)}>{s.nama}</option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-400 mt-1">
-            Kosongkan untuk pakai PIC dari data affiliate. Campaign Support otomatis dari PIC campaign.
-          </p>
-        </div>
 
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1.5">Catatan (opsional)</label>
