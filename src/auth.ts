@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  trustHost: true,          // Required for Railway / reverse-proxy deployments
   providers: [
     Google({
       clientId:     process.env.GOOGLE_CLIENT_ID  ?? "",
