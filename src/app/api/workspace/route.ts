@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.globalRole !== "OWNER") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body    = await req.json() as { name?: string; slug?: string; logoUrl?: string };
+  const body    = await req.json() as { name?: string; slug?: string; logoUrl?: string; theme?: string };
   const name    = String(body.name ?? "").trim();
   const slugRaw = String(body.slug ?? "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const slug    = slugRaw || name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
@@ -55,6 +55,7 @@ export async function POST(req: Request) {
       name,
       slug,
       logoUrl: body.logoUrl ?? "",
+      theme:   body.theme   ?? "{}",
       members: {
         create: { userId: session.user.id, role: "OWNER", status: "active" },
       },
