@@ -35,6 +35,23 @@ interface VideoSubmission {
   notes: string;
   submittedAt: string;
 }
+const SAMPLE_CATEGORIES = [
+  "First Collaboration",
+  "Campaign Support",
+  "Repeat / Restock",
+  "Paid Collaboration",
+  "Custom Request",
+] as const;
+type SampleCategory = typeof SAMPLE_CATEGORIES[number];
+
+const CATEGORY_META: Record<SampleCategory, { icon: string; color: string }> = {
+  "First Collaboration": { icon: "🌟", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  "Campaign Support":    { icon: "📣", color: "bg-violet-50 text-violet-700 border-violet-200" },
+  "Repeat / Restock":    { icon: "🔄", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  "Paid Collaboration":  { icon: "💰", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  "Custom Request":      { icon: "🎯", color: "bg-rose-50 text-rose-700 border-rose-200" },
+};
+
 interface Delivery {
   id: number;
   affiliateUsername: string;
@@ -51,6 +68,11 @@ interface Delivery {
   updatedAt: string;
   googleFormLink?: string;            // Personalized prefilled Google Form link
   videoSubmissions?: VideoSubmission[]; // undefined = not yet lazy-loaded
+  // Category system
+  sampleCategory?: string;
+  relatedCampaignId?: number | null;
+  deliveryReason?: string;
+  isRepeatCreator?: boolean;
 }
 interface ReminderTemplate {
   id: number;
@@ -639,6 +661,14 @@ const DeliveryCard = memo(function DeliveryCard({ delivery, templates, cfg, onUp
               <span className={`w-1.5 h-1.5 rounded-full ${progressCfg.dot}`} />
               {delivery.statusProgress}
             </span>
+            {delivery.sampleCategory && delivery.sampleCategory !== "First Collaboration" && (() => {
+              const m = CATEGORY_META[delivery.sampleCategory as SampleCategory];
+              return m ? (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${m.color}`}>
+                  {m.icon} {delivery.sampleCategory}
+                </span>
+              ) : null;
+            })()}
             {delivery.pic && (
               <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
                 👤 {delivery.pic}
@@ -813,14 +843,35 @@ interface AffiliateLookup {
 
 type WaSendStatus = "sent" | "failed" | "no_phone" | "no_wa";
 
-function AddDeliveryForm({ onSuccess, onCancel, cfg }: { onSuccess: () => void; onCancel: () => void; cfg: DeadlineConfig }) {
+interface CampaignOption { id: number; nama: string; status: string; }
+interface PrevDeliveryOption { id: number; affiliateUsername: string; tanggalKirim: string; produk: string; }
+
+function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
+  onSuccess: () => void; onCancel: () => void; cfg: DeadlineConfig;
+  prefill?: Partial<{
+    affiliateUsername: string; sampleCategory: SampleCategory;
+    relatedCampaignId: number; relatedCampaignName: string;
+  }>;
+}) {
   const [form, setForm] = useState({
-    affiliateUsername: "", produk: "", qtyProduk: "1",
+    affiliateUsername: prefill?.affiliateUsername || "",
+    produk: "", qtyProduk: "1",
     totalVideoTarget: "3", tanggalKirim: new Date().toISOString().slice(0, 10), catatan: "",
+    sampleCategory:    prefill?.sampleCategory || "First Collaboration" as SampleCategory,
+    relatedCampaignId: prefill?.relatedCampaignId ? String(prefill.relatedCampaignId) : "",
+    deliveryReason: "",
+    previousDeliveryId: "",
   });
   const [affiliate, setAffiliate] = useState<AffiliateLookup | null>(null);
   const [looking, setLooking] = useState(false);
   const [saving, setSaving]   = useState(false);
+  // Campaign search state
+  const [campaignQuery, setCampaignQuery] = useState(prefill?.relatedCampaignName || "");
+  const [campaigns, setCampaigns]         = useState<CampaignOption[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  // Previous delivery search state
+  const [prevDeliveries, setPrevDeliveries] = useState<PrevDeliveryOption[]>([]);
+  const [loadingPrev, setLoadingPrev] = useState(false);
 
   // ── Result state shown after successful save ─────────────────────────────
   const [savedResult, setSavedResult] = useState<{
@@ -856,6 +907,53 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg }: { onSuccess: () => void; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.affiliateUsername]);
 
+  // Fetch campaigns when "Campaign Support" is selected (fetched once, filtered client-side)
+  const allCampaignsRef = useRef<CampaignOption[]>([]);
+  useEffect(() => {
+    if (form.sampleCategory !== "Campaign Support") return;
+    if (allCampaignsRef.current.length > 0) {
+      // Already fetched — just filter
+      const q = campaignQuery.trim().toLowerCase();
+      setCampaigns(q ? allCampaignsRef.current.filter(c => c.nama.toLowerCase().includes(q)) : allCampaignsRef.current);
+      return;
+    }
+    let active = true;
+    setLoadingCampaigns(true);
+    fetch("/api/campaigns")
+      .then(r => r.json())
+      .then((d: CampaignOption[] | unknown) => {
+        if (!active) return;
+        const list: CampaignOption[] = Array.isArray(d) ? (d as CampaignOption[]) : [];
+        allCampaignsRef.current = list;
+        const q = campaignQuery.trim().toLowerCase();
+        setCampaigns(q ? list.filter(c => c.nama.toLowerCase().includes(q)) : list);
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => { if (active) setLoadingCampaigns(false); });
+    return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.sampleCategory, campaignQuery]);
+
+  // Fetch previous deliveries when "Repeat / Restock" is selected & username is set
+  useEffect(() => {
+    if (form.sampleCategory !== "Repeat / Restock" || !form.affiliateUsername) {
+      setPrevDeliveries([]); return;
+    }
+    let active = true;
+    const fetch_ = async () => {
+      setLoadingPrev(true);
+      try {
+        const res = await fetch(`/api/sample-delivery?username=${encodeURIComponent(form.affiliateUsername)}&limit=20&subs=0`);
+        if (res.ok && active) {
+          const d = await res.json() as { items?: PrevDeliveryOption[] };
+          setPrevDeliveries(d.items ?? []);
+        }
+      } catch { /* ignore */ } finally { if (active) setLoadingPrev(false); }
+    };
+    fetch_();
+    return () => { active = false; };
+  }, [form.sampleCategory, form.affiliateUsername]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -863,9 +961,17 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg }: { onSuccess: () => void; 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...form,
-        qtyProduk:        Number(form.qtyProduk) || 1,
-        totalVideoTarget: Number(form.totalVideoTarget) || 0,
+        affiliateUsername:  form.affiliateUsername,
+        produk:             form.produk,
+        qtyProduk:          Number(form.qtyProduk) || 1,
+        totalVideoTarget:   Number(form.totalVideoTarget) || 0,
+        tanggalKirim:       form.tanggalKirim,
+        catatan:            form.catatan,
+        sampleCategory:     form.sampleCategory,
+        relatedCampaignId:  form.relatedCampaignId ? Number(form.relatedCampaignId) : null,
+        previousDeliveryId: form.previousDeliveryId ? Number(form.previousDeliveryId) : null,
+        deliveryReason:     form.deliveryReason,
+        isRepeatCreator:    form.previousDeliveryId ? true : false,
       }),
     });
     let json: { id?: number; submissionLink?: string; googleFormLink?: string; waStatus?: WaSendStatus } = {};
@@ -1017,6 +1123,97 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg }: { onSuccess: () => void; 
           )}
         </div>
 
+        {/* Category */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">Kategori Pengiriman</label>
+          <div className="flex flex-wrap gap-2">
+            {SAMPLE_CATEGORIES.map(cat => {
+              const m = CATEGORY_META[cat];
+              const active = form.sampleCategory === cat;
+              return (
+                <button key={cat} type="button"
+                  onClick={() => setForm(f => ({ ...f, sampleCategory: cat, relatedCampaignId: "", previousDeliveryId: "" }))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    active ? `${m.color} ring-1 ring-offset-1` : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  {m.icon} {cat}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Campaign picker — only when Campaign Support */}
+          {form.sampleCategory === "Campaign Support" && (
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-500">Campaign Terkait</label>
+              <input
+                className={inputCls} placeholder="Cari nama campaign..."
+                value={campaignQuery}
+                onChange={e => { setCampaignQuery(e.target.value); setForm(f => ({ ...f, relatedCampaignId: "" })); }}
+              />
+              {loadingCampaigns && <span className="text-xs text-gray-400">Mencari campaign...</span>}
+              {campaigns.length > 0 && !form.relatedCampaignId && (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm max-h-44 overflow-y-auto">
+                  {campaigns.map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => { setForm(f => ({ ...f, relatedCampaignId: String(c.id) })); setCampaignQuery(c.nama); }}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-left hover:bg-indigo-50 transition-colors"
+                    >
+                      <span className="font-medium text-gray-800 truncate">{c.nama}</span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                        c.status === "Ongoing" ? "bg-emerald-50 text-emerald-700" :
+                        c.status === "Published" ? "bg-violet-50 text-violet-700" : "bg-gray-100 text-gray-500"
+                      }`}>{c.status}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {form.relatedCampaignId && (
+                <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2">
+                  <span className="text-xs font-semibold text-violet-700 flex-1 truncate">📣 {campaignQuery}</span>
+                  <button type="button" onClick={() => { setForm(f => ({ ...f, relatedCampaignId: "" })); setCampaignQuery(""); }}
+                    className="text-violet-400 hover:text-violet-600 text-xs">✕</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Previous delivery picker — only when Repeat / Restock */}
+          {form.sampleCategory === "Repeat / Restock" && (
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-500">Pengiriman Sebelumnya (opsional)</label>
+              {loadingPrev ? (
+                <span className="text-xs text-gray-400">Memuat riwayat...</span>
+              ) : prevDeliveries.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">Belum ada riwayat pengiriman untuk creator ini.</p>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm max-h-36 overflow-y-auto">
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, previousDeliveryId: "" }))}
+                    className={`w-full flex items-center px-4 py-2 text-xs text-left hover:bg-gray-50 ${!form.previousDeliveryId ? "bg-gray-50 font-semibold text-gray-700" : "text-gray-400"}`}
+                  >
+                    — Tidak ada referensi
+                  </button>
+                  {prevDeliveries.map(d => (
+                    <button key={d.id} type="button"
+                      onClick={() => setForm(f => ({ ...f, previousDeliveryId: String(d.id) }))}
+                      className={`w-full flex items-center justify-between gap-3 px-4 py-2 text-xs text-left hover:bg-emerald-50 transition-colors ${form.previousDeliveryId === String(d.id) ? "bg-emerald-50 text-emerald-700 font-semibold" : "text-gray-700"}`}
+                    >
+                      <span>{d.produk || "(produk kosong)"}</span>
+                      <span className="text-gray-400 shrink-0">{new Date(d.tanggalKirim).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Alasan Restock</label>
+                <input className={inputCls} placeholder="Misal: Produk habis, minta restock..." value={form.deliveryReason} onChange={e => setForm(f => ({ ...f, deliveryReason: e.target.value }))} />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Delivery details */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
@@ -1086,9 +1283,11 @@ export default function SampleDeliveryPage() {
   const [page, setPage]           = useState(1);
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
+  const [formPrefill, setFormPrefill] = useState<Parameters<typeof AddDeliveryForm>[0]["prefill"]>(undefined);
   const [templates, setTemplates] = useState<ReminderTemplate[]>([]);
   const [deadlineCfg, setDeadlineCfg] = useState<DeadlineConfig>(DEFAULT_DEADLINE_CONFIG);
   const [submissionFilter, setSubmissionFilter] = useState("");
+  const [categoryFilter, setCategoryFilter]     = useState("");
   const [fetchError, setFetchError]             = useState<string | null>(null);
 
   // Auto-sync state
@@ -1108,7 +1307,8 @@ export default function SampleDeliveryPage() {
     try {
       // subs=0 → skip heavy videoSubmissions join on initial list; each card lazy-loads on expand
       const params = new URLSearchParams({ page: String(page), limit: "10", subs: "0" });
-      if (search) params.set("username", search);
+      if (search)         params.set("username", search);
+      if (categoryFilter) params.set("category", categoryFilter);
       const res = await fetch(`/api/sample-delivery?${params}`, { signal });
       let json: { items?: Delivery[]; total?: number } = {};
       try { const t = await res.text(); json = t ? JSON.parse(t) : {}; } catch { /* ignore */ }
@@ -1151,7 +1351,7 @@ export default function SampleDeliveryPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, submissionFilter, deadlineCfg]);
+  }, [page, search, statusFilter, submissionFilter, categoryFilter, deadlineCfg]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1335,37 +1535,57 @@ export default function SampleDeliveryPage() {
       {/* Form */}
       {showForm && (
         <AddDeliveryForm
-          onSuccess={() => { setShowForm(false); fetchData(); }}
-          onCancel={() => setShowForm(false)}
+          onSuccess={() => { setShowForm(false); setFormPrefill(undefined); fetchData(); }}
+          onCancel={() => { setShowForm(false); setFormPrefill(undefined); }}
           cfg={deadlineCfg}
+          prefill={formPrefill}
         />
       )}
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap items-center">
-        <input type="text" placeholder="Cari username..."
-          value={searchInput} onChange={e => setSearchInput(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white w-48" />
-        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">Semua Progress</option>
-          <option value="Selesai">✅ Selesai</option>
-          <option value="On Progress">🔄 On Progress</option>
-          <option value="Belum Mulai">⏳ Belum Mulai</option>
-        </select>
-        <select value={submissionFilter} onChange={e => { setSubmissionFilter(e.target.value); setPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">Semua Submission</option>
-          <option value="belum">⬜ Belum Submit</option>
-          <option value="partial">🔵 Partial Submit</option>
-          <option value="complete">✅ Complete</option>
-          <option value="terlambat">🔴 Terlambat Submit</option>
-        </select>
-        {(searchInput || statusFilter || submissionFilter) && (
-          <button onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setSubmissionFilter(""); }}
-            className="text-xs text-red-500 hover:underline px-2">Reset</button>
-        )}
-        <span className="text-sm text-gray-400 ml-auto">{items.length} pengiriman</span>
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap items-center">
+          <input type="text" placeholder="Cari username..."
+            value={searchInput} onChange={e => setSearchInput(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white w-48" />
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">Semua Progress</option>
+            <option value="Selesai">✅ Selesai</option>
+            <option value="On Progress">🔄 On Progress</option>
+            <option value="Belum Mulai">⏳ Belum Mulai</option>
+          </select>
+          <select value={submissionFilter} onChange={e => { setSubmissionFilter(e.target.value); setPage(1); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">Semua Submission</option>
+            <option value="belum">⬜ Belum Submit</option>
+            <option value="partial">🔵 Partial Submit</option>
+            <option value="complete">✅ Complete</option>
+            <option value="terlambat">🔴 Terlambat Submit</option>
+          </select>
+          {(searchInput || statusFilter || submissionFilter || categoryFilter) && (
+            <button onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setSubmissionFilter(""); setCategoryFilter(""); }}
+              className="text-xs text-red-500 hover:underline px-2">Reset</button>
+          )}
+          <span className="text-sm text-gray-400 ml-auto">{items.length} pengiriman</span>
+        </div>
+        {/* Category filter chips */}
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => { setCategoryFilter(""); setPage(1); }}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${!categoryFilter ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"}`}>
+            Semua
+          </button>
+          {SAMPLE_CATEGORIES.map(cat => {
+            const m = CATEGORY_META[cat];
+            const active = categoryFilter === cat;
+            return (
+              <button key={cat} onClick={() => { setCategoryFilter(active ? "" : cat); setPage(1); }}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${active ? `${m.color} ring-1` : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"}`}>
+                {m.icon} {cat}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Cards */}

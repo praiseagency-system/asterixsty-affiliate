@@ -55,6 +55,14 @@ interface Participant {
   joinedAt:string;status:string;videoCount:number;views:number;gmvContributed:number;
   lastVideoAt?:string|null;
 }
+interface CampaignSampleDelivery {
+  id: number;
+  affiliateUsername: string;
+  statusProgress: string;
+  sampleCategory: string;
+  produk: string;
+  tanggalKirim: string;
+}
 interface BroadcastLog {
   id:number;campaignId:number;message:string;targetType:string;
   totalSent:number;status:string;scheduledAt:string|null;sentAt:string|null;createdAt:string;
@@ -370,6 +378,161 @@ function OverviewTab({c}:{c:Campaign}){
   );
 }
 
+// ─── Send Sample Modal ────────────────────────────────────────────────────────
+const DELIVERY_PRODUCTS_CACHE: {list: string[]; ts: number} = { list: [], ts: 0 };
+
+function SendSampleModal({participant,campaign,onClose,onSent}:{
+  participant: Participant;
+  campaign: Campaign;
+  onClose: ()=>void;
+  onSent: ()=>void;
+}) {
+  const [form,setForm]=useState({
+    produk:"",qtyProduk:"1",
+    totalVideoTarget:"3",
+    tanggalKirim:new Date().toISOString().slice(0,10),
+    catatan:"",
+    deliveryReason:"",
+  });
+  const [saving,setSaving]=useState(false);
+  const [result,setResult]=useState<{ok:boolean;msg:string}|null>(null);
+  const [productSuggestions,setProductSuggestions]=useState<string[]>([]);
+
+  useEffect(()=>{
+    // Load product suggestions (cache for 60s)
+    if(DELIVERY_PRODUCTS_CACHE.ts>Date.now()-60_000&&DELIVERY_PRODUCTS_CACHE.list.length>0){
+      setProductSuggestions(DELIVERY_PRODUCTS_CACHE.list);return;
+    }
+    fetch("/api/master/suggestions?type=produk")
+      .then(r=>r.json())
+      .then((d:{value?:string}[]|unknown)=>{
+        const list=Array.isArray(d)?d.filter((x)=>typeof (x as {value?:string}).value==="string").map((x)=>(x as {value:string}).value):[];
+        DELIVERY_PRODUCTS_CACHE.list=list;DELIVERY_PRODUCTS_CACHE.ts=Date.now();
+        setProductSuggestions(list);
+      }).catch(()=>{});
+  },[]);
+
+  async function handleSubmit(e:React.FormEvent){
+    e.preventDefault();
+    setSaving(true);
+    try{
+      const res=await fetch("/api/sample-delivery",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          affiliateUsername: participant.tiktokUsername,
+          produk:            form.produk,
+          qtyProduk:         Number(form.qtyProduk)||1,
+          totalVideoTarget:  Number(form.totalVideoTarget)||0,
+          tanggalKirim:      form.tanggalKirim,
+          catatan:           form.catatan,
+          sampleCategory:    "Campaign Support",
+          relatedCampaignId: campaign.id,
+          deliveryReason:    form.deliveryReason,
+          isRepeatCreator:   false,
+        }),
+      });
+      if(res.ok){
+        setResult({ok:true,msg:"✅ Sample berhasil dibuat & WA notifikasi dikirim!"});
+        onSent();
+      }else{
+        const d=await res.json() as {error?:string};
+        setResult({ok:false,msg:d.error||"Gagal membuat sample delivery."});
+      }
+    }catch(err){
+      setResult({ok:false,msg:String(err)});
+    }finally{setSaving(false);}
+  }
+
+  const inputCls="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white";
+
+  return(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50 to-white">
+          <div>
+            <h3 className="font-bold text-gray-900">📦 Kirim Sample</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              <span className="font-semibold text-violet-700">@{participant.tiktokUsername}</span>
+              {participant.namaAffiliate&&<span className="text-gray-400"> · {participant.namaAffiliate}</span>}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+
+        {result?(
+          <div className="p-6 space-y-4">
+            <div className={`rounded-xl p-4 text-sm font-medium ${result.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-red-50 text-red-700 border border-red-200"}`}>
+              {result.msg}
+            </div>
+            <div className="flex gap-3">
+              {result.ok&&(
+                <a href="/sample-delivery" target="_blank" rel="noreferrer"
+                  className="flex-1 text-center py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700">
+                  Lihat Sample Delivery ↗
+                </a>
+              )}
+              <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                {result.ok?"Tutup":"Coba Lagi"}
+              </button>
+            </div>
+          </div>
+        ):(
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {/* Auto-filled info */}
+            <div className="bg-violet-50 border border-violet-100 rounded-xl p-3 text-xs space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-violet-500 font-semibold">Campaign:</span>
+                <span className="text-violet-800 font-bold">{campaign.nama}</span>
+                <span className="px-1.5 py-0.5 bg-violet-200 text-violet-700 rounded-md text-[10px] font-semibold">Campaign Support</span>
+              </div>
+              {participant.whatsapp&&<p className="text-gray-500">📱 {participant.whatsapp}</p>}
+              {participant.visualTake&&<p className="text-gray-500">🎬 {participant.visualTake}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Produk Dikirim *</label>
+                <input list="produk-suggestions" required className={inputCls} placeholder="Pilih atau ketik produk..."
+                  value={form.produk} onChange={e=>setForm(f=>({...f,produk:e.target.value}))}/>
+                <datalist id="produk-suggestions">
+                  {productSuggestions.map(p=><option key={p} value={p}/>)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Qty</label>
+                <input type="number" min={1} className={inputCls} value={form.qtyProduk} onChange={e=>setForm(f=>({...f,qtyProduk:e.target.value}))}/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Target Video</label>
+                <input type="number" min={0} max={20} className={inputCls} value={form.totalVideoTarget} onChange={e=>setForm(f=>({...f,totalVideoTarget:e.target.value}))}/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Tanggal Kirim</label>
+                <input type="date" className={inputCls} value={form.tanggalKirim} onChange={e=>setForm(f=>({...f,tanggalKirim:e.target.value}))}/>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Catatan (opsional)</label>
+                <textarea rows={2} className={`${inputCls} resize-none`} placeholder="Catatan pengiriman..."
+                  value={form.catatan} onChange={e=>setForm(f=>({...f,catatan:e.target.value}))}/>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button type="submit" disabled={saving||!form.produk}
+                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving?(<><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Menyimpan...</>):"📦 Kirim Sample"}
+              </button>
+              <button type="button" onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Batal</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Participants Tab ─────────────────────────────────────────────────────────
 function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
   c:Campaign;onRefresh:()=>void;
@@ -394,6 +557,9 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
   const [rejectId,setRejectId]=useState<number|null>(null);
   const [rejectReason,setRejectReason]=useState("");
   const [toast,setToast]      =useState<{msg:string;type:"ok"|"err"}|null>(null);
+  // Sample delivery state
+  const [sampleModal,setSampleModal]          =useState<Participant|null>(null);
+  const [campaignSamples,setCampaignSamples]  =useState<CampaignSampleDelivery[]>([]);
 
   function showToast(msg:string,type:"ok"|"err"){setToast({msg,type});setTimeout(()=>setToast(null),4000);}
 
@@ -425,8 +591,19 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
     }catch(e){console.error(e);}
   },[c.id]);
 
+  const fetchSamples=useCallback(async()=>{
+    try{
+      const res=await fetch(`/api/sample-delivery?campaignId=${c.id}&limit=200&subs=0`);
+      if(res.ok){
+        const d=await res.json() as {items?:CampaignSampleDelivery[]};
+        setCampaignSamples(d.items??[]);
+      }
+    }catch{ /* non-critical */ }
+  },[c.id]);
+
   useEffect(()=>{fetchP();},[fetchP]);
   useEffect(()=>{fetchRegs();},[fetchRegs]);
+  useEffect(()=>{fetchSamples();},[fetchSamples]);
 
   async function handleAdd(e:React.FormEvent){
     e.preventDefault();
@@ -499,6 +676,15 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
         <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 ${toast.type==="ok"?"bg-emerald-600 text-white":"bg-red-600 text-white"}`}>
           <span>{toast.type==="ok"?"✅":"❌"}</span>{toast.msg}
         </div>
+      )}
+      {/* Send Sample Modal */}
+      {sampleModal&&(
+        <SendSampleModal
+          participant={sampleModal}
+          campaign={c}
+          onClose={()=>setSampleModal(null)}
+          onSent={()=>{fetchSamples();showToast("Sample delivery dibuat!","ok");setSampleModal(null);}}
+        />
       )}
       {/* Reject Modal */}
       {rejectId!==null&&(
@@ -627,8 +813,8 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["#","Affiliator","Kategori","VT","Video","Views","GMV","Status","Registrasi","Join","Last Submit",""].map(h=>(
-                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap ${["GMV","Views"].includes(h)?"text-right":["Video",""].includes(h)?"text-center":"text-left"}`}>{h}</th>
+                  {["#","Affiliator","Kategori","VT","Video","Views","GMV","Status","Registrasi","Join","Last Submit","Sample",""].map(h=>(
+                    <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap ${["GMV","Views"].includes(h)?"text-right":["Video","Sample",""].includes(h)?"text-center":"text-left"}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -671,6 +857,30 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
                         ):(
                           <span className="text-gray-300">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {(()=>{
+                          const sample=campaignSamples.find(s=>s.affiliateUsername.toLowerCase()===p.tiktokUsername.toLowerCase());
+                          const STATUS_CLS:{[k:string]:string}={
+                            "Selesai":   "bg-emerald-50 text-emerald-700 border-emerald-200",
+                            "On Progress":"bg-blue-50 text-blue-700 border-blue-200",
+                            "Belum Mulai":"bg-amber-50 text-amber-700 border-amber-200",
+                          };
+                          if(sample){
+                            const cls=STATUS_CLS[sample.statusProgress]??"bg-gray-50 text-gray-500 border-gray-200";
+                            return(
+                              <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full border ${cls}`}>
+                                📦 {sample.statusProgress}
+                              </span>
+                            );
+                          }
+                          return(
+                            <button onClick={()=>setSampleModal(p)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors whitespace-nowrap">
+                              📦 Kirim
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={()=>handleRemove(p.id)} className="text-gray-300 hover:text-red-500 transition-colors text-lg">×</button>

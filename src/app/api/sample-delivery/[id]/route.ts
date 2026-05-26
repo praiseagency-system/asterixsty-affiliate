@@ -61,6 +61,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       totalVideoDone,
       statusProgress,
       catatan:        body.catatan !== undefined ? body.catatan : current.catatan,
+      ...(body.sampleCategory     !== undefined ? { sampleCategory:    String(body.sampleCategory) }    : {}),
+      ...(body.relatedCampaignId  !== undefined ? { relatedCampaignId: body.relatedCampaignId ? Number(body.relatedCampaignId) : null } : {}),
+      ...(body.deliveryReason     !== undefined ? { deliveryReason:    String(body.deliveryReason) }    : {}),
+      ...(body.isRepeatCreator    !== undefined ? { isRepeatCreator:   Boolean(body.isRepeatCreator) }  : {}),
     },
   });
 

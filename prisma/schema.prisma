@@ -262,6 +262,12 @@ model SampleDelivery {
   statusProgress   String   @default("Belum Mulai")
   catatan          String   @default("")
   googleFormLink   String   @default("") // Personalized prefilled Google Form link
+  // Category system
+  sampleCategory      String  @default("First Collaboration") // First Collaboration | Campaign Support | Repeat / Restock | Paid Collaboration | Custom Request
+  relatedCampaignId   Int?    // FK to Campaign.id (set when sampleCategory = "Campaign Support")
+  previousDeliveryId  Int?    // FK to SampleDelivery.id (set for Repeat / Restock)
+  deliveryReason      String  @default("")
+  isRepeatCreator     Boolean @default(false)
   deletedAt        DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -15,14 +15,18 @@ function calcProgress(ceklis: { done: boolean }[], target: number) {
 }
 
 export async function GET(req: Request) {
-  const url         = new URL(req.url);
-  const username    = url.searchParams.get("username") || "";
-  const page        = parseInt(url.searchParams.get("page") || "1");
-  const limit       = parseInt(url.searchParams.get("limit") || "10");
-  const includeSubs = url.searchParams.get("subs") !== "0"; // skip with ?subs=0
+  const url             = new URL(req.url);
+  const username        = url.searchParams.get("username") || "";
+  const page            = parseInt(url.searchParams.get("page") || "1");
+  const limit           = parseInt(url.searchParams.get("limit") || "10");
+  const includeSubs     = url.searchParams.get("subs") !== "0"; // skip with ?subs=0
+  const categoryFilter  = url.searchParams.get("category")   || "";
+  const campaignIdParam = url.searchParams.get("campaignId") || "";
 
   const where: Record<string, unknown> = { deletedAt: null };
-  if (username) where.affiliateUsername = { contains: username };
+  if (username)        where.affiliateUsername = { contains: username };
+  if (categoryFilter)  where.sampleCategory    = categoryFilter;
+  if (campaignIdParam) where.relatedCampaignId = Number(campaignIdParam);
 
   const [total, items] = await Promise.all([
     prisma.sampleDelivery.count({ where }),
@@ -85,15 +89,20 @@ export async function POST(req: Request) {
 
   const item = await prisma.sampleDelivery.create({
     data: {
-      affiliateUsername: (body.affiliateUsername || "").replace(/^@/, ""),
-      tanggalKirim:      body.tanggalKirim ? new Date(body.tanggalKirim) : new Date(),
-      produk:            body.produk || "",
-      qtyProduk:         Number(body.qtyProduk) || 1,
-      totalVideoTarget:  target,
-      videoCeklis:       JSON.stringify(ceklis),
+      affiliateUsername:  (body.affiliateUsername || "").replace(/^@/, ""),
+      tanggalKirim:       body.tanggalKirim ? new Date(body.tanggalKirim) : new Date(),
+      produk:             body.produk || "",
+      qtyProduk:          Number(body.qtyProduk) || 1,
+      totalVideoTarget:   target,
+      videoCeklis:        JSON.stringify(ceklis),
       totalVideoDone,
       statusProgress,
-      catatan:           body.catatan || "",
+      catatan:            body.catatan || "",
+      sampleCategory:     String(body.sampleCategory || "First Collaboration"),
+      relatedCampaignId:  body.relatedCampaignId  ? Number(body.relatedCampaignId)  : null,
+      previousDeliveryId: body.previousDeliveryId ? Number(body.previousDeliveryId) : null,
+      deliveryReason:     String(body.deliveryReason || ""),
+      isRepeatCreator:    Boolean(body.isRepeatCreator),
     },
   });
 
