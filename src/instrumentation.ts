@@ -19,6 +19,15 @@ export async function register() {
     console.warn("[Instrumentation] WA auto-reconnect failed:", err);
   }
 
+  // Reset queue items stuck in "processing" from a previous server instance.
+  // Must run AFTER DB is ready (getPrisma is lazy so it's fine here).
+  try {
+    const { resetStaleProcessing } = await import("@/lib/wa-queue-worker");
+    await resetStaleProcessing();
+  } catch (err) {
+    console.warn("[Instrumentation] resetStaleProcessing failed:", err);
+  }
+
   // ── Google Form background auto-sync ───────────────────────────────────────
   // Start after 60s delay so the app and DB connections are fully ready.
   // Syncs every 2 minutes; errors are caught and logged, never crash the server.

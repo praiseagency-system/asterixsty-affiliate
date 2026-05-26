@@ -58,6 +58,26 @@ interface ProcessResult {
   error?:       string;
   lastRecipient?: { name: string; phone: string; status: "success" | "failed" | "retry" };
 }
+interface WorkerLog {
+  ts:       string;
+  type:     "info" | "success" | "failed" | "retry" | "warn" | "done";
+  message:  string;
+  name?:    string;
+  phone?:   string;
+  sessionId?: number;
+  waitSec?: number;
+}
+interface WorkerState {
+  active:       boolean;
+  broadcastId:  number | null;
+  currentItem:  { id: number; recipientName: string; phone: string } | null;
+  nextSendAt:   string | null;
+  logs:         WorkerLog[];
+  stats:        { processed: number; success: number; failed: number; retry: number };
+  startedAt:    string | null;
+  stoppedAt:    string | null;
+  error:        string | null;
+}
 
 // ─── Group color map ──────────────────────────────────────────────────────────
 const GROUP_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -963,15 +983,11 @@ function BroadcastPageInner() {
   const [processingQueue, setProcessingQueue] = useState(false);
   const [showMonitor, setShowMonitor]     = useState(false);
 
-  // Auto-send loop
-  const [isAutoRunning, setIsAutoRunning] = useState(false);
+  // Background worker state (replaces client-side auto-send loop)
+  const [workerStatus, setWorkerStatus]   = useState<WorkerState | null>(null);
   const [countdown, setCountdown]         = useState(0);
-  const [autoLog, setAutoLog]             = useState<AutoLogEntry[]>([]);
-  const isAutoRunningRef                  = useRef(false);
-  const monitorBroadcastIdRef             = useRef<number | null>(null);
-  const autoTimerRef                      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countdownRef                      = useRef(0);
-  const runNextRef                        = useRef<() => Promise<void>>(async () => {});
+  const nextSendAtRef                     = useRef<string | null>(null);
+  const workerPollRef                     = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // WA session status (from Automation Center)
   const [waStatus, setWaStatus] = useState<{
@@ -1196,102 +1212,66 @@ function BroadcastPageInner() {
     await loadAll();
   }
 
-  // Keep broadcast ID ref in sync with state (used inside interval closures)
-  useEffect(() => { monitorBroadcastIdRef.current = monitorBroadcastId; }, [monitorBroadcastId]);
+  // ── Countdown tick (1s) ────────────────────────────────────────────────────
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const nsa = nextSendAtRef.current;
+      if (!nsa) { setCountdown(0); return; }
+      const remaining = Math.max(0, Math.ceil((Date.parse(nsa) - Date.now()) / 1000));
+      setCountdown(remaining);
+    }, 1_000);
+    return () => clearInterval(tick);
+  }, []);
 
-  // Cleanup on unmount
+  // ── Worker poll (2s when monitor open) ────────────────────────────────────
+  useEffect(() => {
+    if (!showMonitor) {
+      if (workerPollRef.current) { clearInterval(workerPollRef.current); workerPollRef.current = null; }
+      return;
+    }
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/wa-queue/worker");
+        if (!res.ok) return;
+        const data = await res.json() as WorkerState;
+        setWorkerStatus(data);
+        nextSendAtRef.current = data.nextSendAt;
+
+        // Refresh queue items while worker is active
+        if (data.active && monitorBroadcastId) {
+          void loadQueue(monitorBroadcastId);
+        }
+        // Worker just finished — reload job list
+        if (!data.active && data.stoppedAt) {
+          void loadAll();
+          if (monitorBroadcastId) void loadQueue(monitorBroadcastId);
+        }
+      } catch { /* ignore */ }
+    };
+    void poll();
+    workerPollRef.current = setInterval(poll, 2_000);
+    return () => { if (workerPollRef.current) { clearInterval(workerPollRef.current); workerPollRef.current = null; } };
+  }, [showMonitor, monitorBroadcastId, loadQueue, loadAll]);
+
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      isAutoRunningRef.current = false;
-      if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+      if (workerPollRef.current) clearInterval(workerPollRef.current);
     };
   }, []);
 
-  const stopAutoRun = useCallback(() => {
-    isAutoRunningRef.current = false;
-    setIsAutoRunning(false);
-    setCountdown(0);
-    countdownRef.current = 0;
-    if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
-  }, []);
+  function stopAutoRun() {
+    void fetch("/api/wa-queue/worker", { method: "DELETE" });
+  }
 
-  const runNext = useCallback(async () => {
-    if (!isAutoRunningRef.current) return;
-    const bid = monitorBroadcastIdRef.current;
-    if (!bid) { stopAutoRun(); return; }
-
-    try {
-      const r = await fetch(`/api/wa-queue/process?limit=1&broadcastId=${bid}`, { method: "POST" });
-      if (!r.ok) { stopAutoRun(); showToast("❌ Auto-send error — dihentikan"); return; }
-
-      const d = await r.json() as ProcessResult;
-
-      if (!d.waConnected) {
-        showToast("⚠️ WA tidak terhubung — auto-send dihentikan");
-        stopAutoRun();
-        return;
-      }
-
-      // Add to live log
-      if (d.lastRecipient) {
-        const waitSec = d.remaining > 0 ? Math.round((d.nextDelayMs || 0) / 1000) : 0;
-        setAutoLog((prev) => [{
-          ts:      new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-          name:    d.lastRecipient!.name || d.lastRecipient!.phone,
-          phone:   d.lastRecipient!.phone,
-          status:  d.lastRecipient!.status,
-          waitSec,
-        }, ...prev].slice(0, 50));
-      }
-
-      // Refresh queue view (non-blocking)
-      void loadQueue(bid);
-
-      if (!isAutoRunningRef.current) return;
-
-      // All done — auto-stop
-      if (d.remaining === 0) {
-        stopAutoRun();
-        showToast("✅ Semua pesan berhasil terkirim!");
-        void loadAll();
-        return;
-      }
-
-      // Start countdown to next send
-      const delayMs  = d.nextDelayMs || 30_000;
-      const delaySec = Math.round(delayMs / 1000);
-      countdownRef.current = delaySec;
-      setCountdown(delaySec);
-
-      if (autoTimerRef.current) clearInterval(autoTimerRef.current);
-      autoTimerRef.current = setInterval(() => {
-        countdownRef.current -= 1;
-        setCountdown(countdownRef.current);
-        if (countdownRef.current <= 0) {
-          if (autoTimerRef.current) { clearInterval(autoTimerRef.current); autoTimerRef.current = null; }
-          if (isAutoRunningRef.current) void runNextRef.current();
-        }
-      }, 1000);
-
-    } catch (err) {
-      console.error("[auto-send]", err);
-      stopAutoRun();
-      showToast("❌ Auto-send error — dihentikan");
-    }
-  }, [loadQueue, loadAll, stopAutoRun]);
-
-  // Keep runNextRef in sync so interval always calls the latest version
-  useEffect(() => { runNextRef.current = runNext; }, [runNext]);
-
-  const startAutoRun = useCallback(() => {
-    if (isAutoRunningRef.current) return;
-    if (!monitorBroadcastIdRef.current) return;
-    isAutoRunningRef.current = true;
-    setIsAutoRunning(true);
-    setCountdown(0);
-    setAutoLog([]);
-    void runNext();
-  }, [runNext]);
+  function startAutoRun() {
+    if (!monitorBroadcastId) return;
+    void fetch("/api/wa-queue/worker", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ broadcastId: monitorBroadcastId }),
+    });
+  }
 
   async function handleProcessQueue() {
     if (!monitorBroadcastId) return;
@@ -1310,8 +1290,10 @@ function BroadcastPageInner() {
   }
 
   async function openMonitor(broadcastId: number) {
-    if (isAutoRunningRef.current) { stopAutoRun(); }
-    setAutoLog([]);
+    // Stop worker if it's running for a different broadcast
+    if (workerStatus?.active && workerStatus?.broadcastId !== broadcastId) {
+      stopAutoRun();
+    }
     setMonitorBroadcastId(broadcastId);
     setShowMonitor(true);
     await loadQueue(broadcastId);
@@ -1319,6 +1301,21 @@ function BroadcastPageInner() {
 
   const waConnected  = availSessions.some((s) => s.status === "CONNECTED") || waStatus.status === "connected";
   const canSend = message.trim() && recipients && recipients.withWA > 0 && waConnected;
+
+  // ── Derived worker state ──────────────────────────────────────────────────
+  const isAutoRunning =
+    workerStatus?.active === true &&
+    (workerStatus?.broadcastId === monitorBroadcastId || !monitorBroadcastId);
+
+  const autoLog: AutoLogEntry[] = (workerStatus?.logs ?? [])
+    .filter((l) => l.type === "success" || l.type === "failed" || l.type === "retry")
+    .map((l) => ({
+      ts:      new Date(l.ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      name:    l.name || l.message,
+      phone:   l.phone || "",
+      status:  l.type as AutoLogEntry["status"],
+      waitSec: l.waitSec || 0,
+    }));
 
   return (
     <div className="space-y-6">
@@ -1705,18 +1702,32 @@ function BroadcastPageInner() {
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Log</p>
                 {isAutoRunning ? (
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Auto-send aktif
-                    {countdown > 0 && (
-                      <span className="text-gray-400">
-                        — kirim berikutnya dalam{" "}
-                        <span className="font-mono font-bold text-amber-600">{countdown}s</span>
+                  <div className="flex items-center gap-3 flex-wrap justify-end">
+                    <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Auto-send aktif
+                      {countdown > 0 && (
+                        <span className="text-gray-400">
+                          — berikutnya{" "}
+                          <span className="font-mono font-bold text-amber-600">{countdown}s</span>
+                        </span>
+                      )}
+                    </span>
+                    {workerStatus?.stats && (
+                      <span className="text-xs text-gray-400 font-mono">
+                        ✓{workerStatus.stats.success} ✗{workerStatus.stats.failed} ↺{workerStatus.stats.retry}
                       </span>
                     )}
-                  </span>
+                  </div>
                 ) : (
-                  <span className="text-xs text-gray-400">Selesai</span>
+                  <div className="flex items-center gap-2">
+                    {workerStatus?.stats && workerStatus.stats.processed > 0 && (
+                      <span className="text-xs text-gray-400 font-mono">
+                        ✓{workerStatus.stats.success} ✗{workerStatus.stats.failed} ↺{workerStatus.stats.retry}
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">Selesai</span>
+                  </div>
                 )}
               </div>
               <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
