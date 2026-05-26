@@ -24,7 +24,7 @@ model User {
   sessions      Session[]
   memberships   WorkspaceMember[]
   ownedAgencies Agency[]
-  waSessions    WhatsappSession[] @relation("SessionOwner")
+  // waSessions stored as plain ownerUserId string on WhatsappSession (no FK to avoid constraint issues)
 }
 
 model Account {
@@ -683,5 +683,5 @@ model WhatsappSession {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  ownerUser    User?     @relation("SessionOwner", fields: [ownerUserId], references: [id])
+  // ownerUserId is a plain string (userId) — no FK constraint so existing "" rows remain valid
 }
