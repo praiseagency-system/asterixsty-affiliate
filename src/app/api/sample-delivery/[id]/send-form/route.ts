@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     where: { id: Number(id) },
     select: {
       id: true, affiliateUsername: true, produk: true, googleFormLink: true,
-      sampleCategory: true, relatedCampaignId: true,
+      sampleCategory: true, relatedCampaignId: true, picName: true,
     },
   });
   if (!delivery) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -73,6 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     sampleCategory,
     campaignName,
     campaignFormLink,
+    picName:           delivery.picName || undefined,
   });
 
   return NextResponse.json({ ok: true, waStatus, phone, submissionLink, waError });

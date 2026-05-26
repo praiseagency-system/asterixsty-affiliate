@@ -65,6 +65,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...(body.relatedCampaignId  !== undefined ? { relatedCampaignId: body.relatedCampaignId ? Number(body.relatedCampaignId) : null } : {}),
       ...(body.deliveryReason     !== undefined ? { deliveryReason:    String(body.deliveryReason) }    : {}),
       ...(body.isRepeatCreator    !== undefined ? { isRepeatCreator:   Boolean(body.isRepeatCreator) }  : {}),
+      ...(body.picId              !== undefined ? { picId:    body.picId ? Number(body.picId) : null }  : {}),
+      ...(body.picName            !== undefined ? { picName:  String(body.picName) }                    : {}),
     },
   });
 

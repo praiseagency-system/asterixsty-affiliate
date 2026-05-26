@@ -22,11 +22,13 @@ export async function GET(req: Request) {
   const includeSubs     = url.searchParams.get("subs") !== "0"; // skip with ?subs=0
   const categoryFilter  = url.searchParams.get("category")   || "";
   const campaignIdParam = url.searchParams.get("campaignId") || "";
+  const picIdParam      = url.searchParams.get("picId") || "";
 
   const where: Record<string, unknown> = { deletedAt: null };
   if (username)        where.affiliateUsername = { contains: username };
   if (categoryFilter)  where.sampleCategory    = categoryFilter;
   if (campaignIdParam) where.relatedCampaignId = Number(campaignIdParam);
+  if (picIdParam)      where.picId             = Number(picIdParam);
 
   const [total, items] = await Promise.all([
     prisma.sampleDelivery.count({ where }),
@@ -87,6 +89,34 @@ export async function POST(req: Request) {
 
   const { totalVideoDone, statusProgress } = calcProgress(ceklis, target);
 
+  // ── Resolve PIC ───────────────────────────────────────────────────────────
+  // Priority: explicit picId > campaign.picSpecialistId (if Campaign Support) > none
+  let picId:   number | null = body.picId ? Number(body.picId) : null;
+  let picName: string        = "";
+
+  // If category is Campaign Support and no picId provided, inherit from campaign
+  const sampleCat = String(body.sampleCategory || "First Collaboration");
+  if (!picId && sampleCat === "Campaign Support" && body.relatedCampaignId) {
+    try {
+      const camp = await prisma.campaign.findUnique({
+        where: { id: Number(body.relatedCampaignId) },
+        select: { picSpecialistId: true, picSpecialist: { select: { nama: true } } },
+      });
+      if (camp?.picSpecialistId) {
+        picId   = camp.picSpecialistId;
+        picName = camp.picSpecialist?.nama ?? "";
+      }
+    } catch { /* non-critical */ }
+  }
+
+  // If picId set but picName still empty, resolve name from AffiliateSpecialist
+  if (picId && !picName) {
+    try {
+      const spec = await prisma.affiliateSpecialist.findUnique({ where: { id: picId }, select: { nama: true } });
+      if (spec) picName = spec.nama;
+    } catch { /* non-critical */ }
+  }
+
   const item = await prisma.sampleDelivery.create({
     data: {
       affiliateUsername:  (body.affiliateUsername || "").replace(/^@/, ""),
@@ -98,11 +128,13 @@ export async function POST(req: Request) {
       totalVideoDone,
       statusProgress,
       catatan:            body.catatan || "",
-      sampleCategory:     String(body.sampleCategory || "First Collaboration"),
+      sampleCategory:     sampleCat,
       relatedCampaignId:  body.relatedCampaignId  ? Number(body.relatedCampaignId)  : null,
       previousDeliveryId: body.previousDeliveryId ? Number(body.previousDeliveryId) : null,
       deliveryReason:     String(body.deliveryReason || ""),
       isRepeatCreator:    Boolean(body.isRepeatCreator),
+      picId,
+      picName,
     },
   });
 
@@ -154,6 +186,7 @@ export async function POST(req: Request) {
     sampleCategory:    item.sampleCategory,
     campaignName,
     campaignFormLink,
+    picName:           item.picName || undefined,
   });
 
   return NextResponse.json({

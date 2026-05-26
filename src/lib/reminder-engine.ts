@@ -184,7 +184,8 @@ export async function runReminderEngine(): Promise<ReminderRunResult> {
       where: { tiktokUsername: delivery.affiliateUsername, deletedAt: null },
     });
     const phone = affiliate?.noWhatsapp ?? "";
-    const pic   = affiliate?.affiliateSpecialist ?? "";
+    // PIC priority: stored on delivery → affiliate.affiliateSpecialist → empty
+    const pic   = delivery.picName || affiliate?.affiliateSpecialist || "";
 
     if (!phone) { result.skipped++; continue; }
 

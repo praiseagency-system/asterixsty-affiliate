@@ -381,12 +381,15 @@ function OverviewTab({c}:{c:Campaign}){
 // ─── Send Sample Modal ────────────────────────────────────────────────────────
 const DELIVERY_PRODUCTS_CACHE: {list: string[]; ts: number} = { list: [], ts: 0 };
 
-function SendSampleModal({participant,campaign,onClose,onSent}:{
+function SendSampleModal({participant,campaign,specialists,onClose,onSent}:{
   participant: Participant;
   campaign: Campaign;
+  specialists: Specialist[];
   onClose: ()=>void;
   onSent: ()=>void;
 }) {
+  // Auto-fill PIC from campaign, allow manual override
+  const [picId,setPicId]=useState<string>(campaign.picSpecialistId?String(campaign.picSpecialistId):"");
   const [form,setForm]=useState({
     produk:"",qtyProduk:"1",
     totalVideoTarget:"3",
@@ -430,6 +433,7 @@ function SendSampleModal({participant,campaign,onClose,onSent}:{
           relatedCampaignId: campaign.id,
           deliveryReason:    form.deliveryReason,
           isRepeatCreator:   false,
+          picId:             picId ? Number(picId) : null,
         }),
       });
       if(res.ok){
@@ -489,7 +493,21 @@ function SendSampleModal({participant,campaign,onClose,onSent}:{
               </div>
               {participant.whatsapp&&<p className="text-gray-500">📱 {participant.whatsapp}</p>}
               {participant.visualTake&&<p className="text-gray-500">🎬 {participant.visualTake}</p>}
+              {campaign.picSpecialist?.nama&&<p className="text-gray-500">👤 PIC: <span className="font-semibold text-violet-700">{campaign.picSpecialist.nama}</span></p>}
             </div>
+
+            {/* PIC Override */}
+            {specialists.length>0&&(
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">PIC / Affiliate Specialist</label>
+                <select className={inputCls} value={picId} onChange={e=>setPicId(e.target.value)}>
+                  <option value="">— Otomatis dari campaign —</option>
+                  {specialists.map(s=>(
+                    <option key={s.id} value={String(s.id)}>{s.nama}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
@@ -534,9 +552,10 @@ function SendSampleModal({participant,campaign,onClose,onSent}:{
 }
 
 // ─── Participants Tab ─────────────────────────────────────────────────────────
-function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
+function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms,specialists}:{
   c:Campaign;onRefresh:()=>void;
   formInfo:CampaignFormInfo|null;onRefreshForms:()=>void;
+  specialists:Specialist[];
 }){
   const [participants,setParticipants]=useState<Participant[]>([]);
   const [loading,setLoading]  =useState(true);
@@ -682,6 +701,7 @@ function ParticipantsTab({c,onRefresh,formInfo,onRefreshForms}:{
         <SendSampleModal
           participant={sampleModal}
           campaign={c}
+          specialists={specialists}
           onClose={()=>setSampleModal(null)}
           onSent={()=>{fetchSamples();showToast("Sample delivery dibuat!","ok");setSampleModal(null);}}
         />
@@ -1531,7 +1551,7 @@ export default function CampaignDetailPage(){
         ))}
       </div>
       {tab==="overview"    &&<OverviewTab      c={campaign}/>}
-      {tab==="participants" &&<ParticipantsTab c={campaign} onRefresh={fetchCampaign} formInfo={formInfo} onRefreshForms={fetchFormInfo}/>}
+      {tab==="participants" &&<ParticipantsTab c={campaign} onRefresh={fetchCampaign} formInfo={formInfo} onRefreshForms={fetchFormInfo} specialists={specialists}/>}
       {tab==="leaderboard"  &&<LeaderboardTab c={campaign}/>}
       {tab==="analytics"    &&<AnalyticsTab   c={campaign}/>}
       {tab==="automation"   &&<AutomationTab  c={campaign} onRefresh={fetchCampaign}/>}

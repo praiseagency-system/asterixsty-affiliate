@@ -82,6 +82,7 @@ export async function sendSampleDeliveryWA(params: {
   sampleCategory?:  string; // drives template + form selection
   campaignName?:    string; // for {campaign_name} placeholder
   campaignFormLink?: string; // campaign submission form (Campaign Support)
+  picName?:         string; // PIC stored on delivery (overrides affiliate.affiliateSpecialist)
 }): Promise<{ waStatus: WaSendStatus; phone: string; submissionLink: string; waError: string }> {
   const {
     deliveryId,
@@ -93,6 +94,7 @@ export async function sendSampleDeliveryWA(params: {
     sampleCategory  = "First Collaboration",
     campaignName    = "",
     campaignFormLink = "",
+    picName         = "",
   } = params;
 
   // ── Resolve submission link ───────────────────────────────────────────────
@@ -161,7 +163,7 @@ export async function sendSampleDeliveryWA(params: {
       footer_branding:      brand.waFooter,
       footer:               brand.waFooter,
       campaign_name:        campaignName,
-      pic:                  "",
+      pic:                  picName || "",
     });
 
     // 6. Send

@@ -64,7 +64,7 @@ interface Delivery {
   catatan: string;
   videoCeklisParsed: CheckItem[];
   noWhatsapp: string;
-  pic: string;
+  pic: string;         // runtime from affiliate.affiliateSpecialist (for WA button fallback)
   updatedAt: string;
   googleFormLink?: string;            // Personalized prefilled Google Form link
   videoSubmissions?: VideoSubmission[]; // undefined = not yet lazy-loaded
@@ -73,6 +73,9 @@ interface Delivery {
   relatedCampaignId?: number | null;
   deliveryReason?: string;
   isRepeatCreator?: boolean;
+  // PIC system
+  picId?: number | null;
+  picName?: string;
 }
 interface ReminderTemplate {
   id: number;
@@ -347,7 +350,7 @@ function WaButton({ delivery, templates, cfg }: { delivery: Delivery; templates:
       produk: delivery.produk,
       deadline: fmtDate(deadlineDate),
       video_ke: videoKe,
-      pic: delivery.pic,
+      pic: delivery.picName || delivery.pic,
       hari_terlambat: hariTerlambat,
     });
 
@@ -669,9 +672,9 @@ const DeliveryCard = memo(function DeliveryCard({ delivery, templates, cfg, onUp
                 </span>
               ) : null;
             })()}
-            {delivery.pic && (
+            {(delivery.picName || delivery.pic) && (
               <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
-                👤 {delivery.pic}
+                👤 {delivery.picName || delivery.pic}
               </span>
             )}
           </div>
@@ -845,12 +848,14 @@ type WaSendStatus = "sent" | "failed" | "no_phone" | "no_wa";
 
 interface CampaignOption { id: number; nama: string; status: string; }
 interface PrevDeliveryOption { id: number; affiliateUsername: string; tanggalKirim: string; produk: string; }
+interface SpecialistOption { id: number; nama: string; }
 
 function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
   onSuccess: () => void; onCancel: () => void; cfg: DeadlineConfig;
   prefill?: Partial<{
     affiliateUsername: string; sampleCategory: SampleCategory;
     relatedCampaignId: number; relatedCampaignName: string;
+    picId: number; picName: string;
   }>;
 }) {
   const [form, setForm] = useState({
@@ -861,6 +866,7 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
     relatedCampaignId: prefill?.relatedCampaignId ? String(prefill.relatedCampaignId) : "",
     deliveryReason: "",
     previousDeliveryId: "",
+    picId: prefill?.picId ? String(prefill.picId) : "",
   });
   const [affiliate, setAffiliate] = useState<AffiliateLookup | null>(null);
   const [looking, setLooking] = useState(false);
@@ -872,6 +878,8 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
   // Previous delivery search state
   const [prevDeliveries, setPrevDeliveries] = useState<PrevDeliveryOption[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
+  // Specialist list (for PIC select)
+  const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
 
   // ── Result state shown after successful save ─────────────────────────────
   const [savedResult, setSavedResult] = useState<{
@@ -954,6 +962,17 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
     return () => { active = false; };
   }, [form.sampleCategory, form.affiliateUsername]);
 
+  // Load specialists once on mount
+  useEffect(() => {
+    fetch("/api/master")
+      .then(r => r.json())
+      .then((d: { specialists?: SpecialistOption[] } | unknown) => {
+        const list = (d as { specialists?: SpecialistOption[] })?.specialists ?? [];
+        setSpecialists(list);
+      })
+      .catch(() => {});
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -972,6 +991,7 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
         previousDeliveryId: form.previousDeliveryId ? Number(form.previousDeliveryId) : null,
         deliveryReason:     form.deliveryReason,
         isRepeatCreator:    form.previousDeliveryId ? true : false,
+        picId:              form.picId ? Number(form.picId) : null,
       }),
     });
     let json: { id?: number; submissionLink?: string; googleFormLink?: string; waStatus?: WaSendStatus } = {};
@@ -1251,6 +1271,24 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
           </div>
         )}
 
+        {/* PIC Select */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1.5">PIC / Affiliate Specialist</label>
+          <select
+            className={inputCls}
+            value={form.picId}
+            onChange={e => set("picId", e.target.value)}
+          >
+            <option value="">— Otomatis dari data affiliate —</option>
+            {specialists.map(s => (
+              <option key={s.id} value={String(s.id)}>{s.nama}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            Kosongkan untuk pakai PIC dari data affiliate. Campaign Support otomatis dari PIC campaign.
+          </p>
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1.5">Catatan (opsional)</label>
           <textarea className={`${inputCls} resize-none`} rows={2} placeholder="Catatan pengiriman..."
@@ -1288,7 +1326,9 @@ export default function SampleDeliveryPage() {
   const [deadlineCfg, setDeadlineCfg] = useState<DeadlineConfig>(DEFAULT_DEADLINE_CONFIG);
   const [submissionFilter, setSubmissionFilter] = useState("");
   const [categoryFilter, setCategoryFilter]     = useState("");
+  const [picFilter, setPicFilter]               = useState("");
   const [fetchError, setFetchError]             = useState<string | null>(null);
+  const [specialists, setSpecialists]           = useState<SpecialistOption[]>([]);
 
   // Auto-sync state
   const [lastSyncAt, setLastSyncAt]   = useState<string | null>(null);
@@ -1309,6 +1349,7 @@ export default function SampleDeliveryPage() {
       const params = new URLSearchParams({ page: String(page), limit: "10", subs: "0" });
       if (search)         params.set("username", search);
       if (categoryFilter) params.set("category", categoryFilter);
+      if (picFilter)      params.set("picId", picFilter);
       const res = await fetch(`/api/sample-delivery?${params}`, { signal });
       let json: { items?: Delivery[]; total?: number } = {};
       try { const t = await res.text(); json = t ? JSON.parse(t) : {}; } catch { /* ignore */ }
@@ -1351,7 +1392,7 @@ export default function SampleDeliveryPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, submissionFilter, categoryFilter, deadlineCfg]);
+  }, [page, search, statusFilter, submissionFilter, categoryFilter, picFilter, deadlineCfg]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1366,6 +1407,10 @@ export default function SampleDeliveryPage() {
     };
     safeJson("/api/reminder-template").then((d) => { if (Array.isArray(d)) setTemplates(d); });
     safeJson("/api/admin/config").then((d) => { if (d?.deadlineConfig) setDeadlineCfg(d.deadlineConfig); });
+    safeJson("/api/master").then((d: { specialists?: SpecialistOption[] } | unknown) => {
+      const list = (d as { specialists?: SpecialistOption[] })?.specialists ?? [];
+      setSpecialists(list);
+    });
   }, []);
 
   // ── Silent refetch: updates item list without loading spinner ─────────────
@@ -1458,6 +1503,22 @@ export default function SampleDeliveryPage() {
       }, 0) / completedItems.length)
     : null;
 
+  // PIC analytics (computed from current page items, keyed by picName || pic)
+  const picStatsMap: Record<string, { total: number; selesai: number; overdue: number; done: number; target: number }> = {};
+  for (const d of items) {
+    const key = d.picName || d.pic || "—";
+    if (!picStatsMap[key]) picStatsMap[key] = { total: 0, selesai: 0, overdue: 0, done: 0, target: 0 };
+    picStatsMap[key].total++;
+    if (d.statusProgress === "Selesai") picStatsMap[key].selesai++;
+    if (isDeliveryOverdue(d, deadlineCfg)) picStatsMap[key].overdue++;
+    picStatsMap[key].done   += d.totalVideoDone;
+    picStatsMap[key].target += d.totalVideoTarget;
+  }
+  const picStats = Object.entries(picStatsMap)
+    .map(([name, s]) => ({ name, ...s, rate: s.target > 0 ? Math.round((s.done / s.target) * 100) : 0 }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5); // top 5 PICs
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -1532,6 +1593,28 @@ export default function SampleDeliveryPage() {
         ))}
       </div>
 
+      {/* PIC Analytics */}
+      {picStats.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">📊 Statistik Per PIC (halaman ini)</p>
+          <div className="space-y-2">
+            {picStats.map(s => (
+              <div key={s.name} className="flex items-center gap-3 text-xs">
+                <span className="w-28 truncate text-gray-700 font-medium shrink-0">{s.name}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full transition-all ${s.rate >= 100 ? "bg-green-500" : s.rate > 0 ? "bg-blue-500" : "bg-gray-300"}`} style={{ width: `${s.rate}%` }} />
+                </div>
+                <span className="text-gray-500 w-10 text-right shrink-0">{s.rate}%</span>
+                <span className="text-gray-400 w-16 text-right shrink-0">{s.done}/{s.target} vid</span>
+                <span className={`w-14 text-right shrink-0 ${s.overdue > 0 ? "text-red-500 font-semibold" : "text-gray-400"}`}>
+                  {s.overdue > 0 ? `⚠ ${s.overdue}` : "✓ ok"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Form */}
       {showForm && (
         <AddDeliveryForm
@@ -1563,8 +1646,17 @@ export default function SampleDeliveryPage() {
             <option value="complete">✅ Complete</option>
             <option value="terlambat">🔴 Terlambat Submit</option>
           </select>
-          {(searchInput || statusFilter || submissionFilter || categoryFilter) && (
-            <button onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setSubmissionFilter(""); setCategoryFilter(""); }}
+          {specialists.length > 0 && (
+            <select value={picFilter} onChange={e => { setPicFilter(e.target.value); setPage(1); }}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">Semua PIC</option>
+              {specialists.map(s => (
+                <option key={s.id} value={String(s.id)}>👤 {s.nama}</option>
+              ))}
+            </select>
+          )}
+          {(searchInput || statusFilter || submissionFilter || categoryFilter || picFilter) && (
+            <button onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setSubmissionFilter(""); setCategoryFilter(""); setPicFilter(""); }}
               className="text-xs text-red-500 hover:underline px-2">Reset</button>
           )}
           <span className="text-sm text-gray-400 ml-auto">{items.length} pengiriman</span>
