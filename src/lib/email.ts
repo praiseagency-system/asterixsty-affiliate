@@ -9,9 +9,15 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY ?? "");
+// Lazy — do NOT instantiate at module level: RESEND_API_KEY is absent at build
+// time and new Resend("") throws, breaking the Next.js "collect page data" step.
+function getResend(): Resend {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error("RESEND_API_KEY is not set");
+  return new Resend(key);
+}
 
-const FROM = process.env.RESEND_FROM_EMAIL ?? "Praise Agency <noreply@praiseagency.id>";
+const FROM    = process.env.RESEND_FROM_EMAIL ?? "Praise Agency <noreply@praiseagency.id>";
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 // ─── Workspace invitation email ───────────────────────────────────────────────
@@ -166,6 +172,7 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<{ ok: 
       return { ok: true };
     }
 
+    const resend = getResend();
     const result = await resend.emails.send({
       from:    FROM,
       to:      params.to,
