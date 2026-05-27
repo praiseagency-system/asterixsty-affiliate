@@ -165,13 +165,13 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Modal card */}
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-[#151821] rounded-2xl shadow-2xl dark:shadow-black/60 w-full max-w-md overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-800">Create New Workspace</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#2a2f3d]">
+          <h2 className="text-base font-bold text-gray-800 dark:text-gray-100">Create New Workspace</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-[#1d212c] transition-colors"
           >
             <XIcon />
           </button>
@@ -188,16 +188,16 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
               <span className="text-white text-xl font-bold">{previewInitials}</span>
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-700">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                 {name.trim() || "Workspace Name"}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">Preview</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Preview</p>
             </div>
           </div>
 
           {/* Workspace name */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
               Workspace Name <span className="text-red-400">*</span>
             </label>
             <input
@@ -206,14 +206,14 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => { setName(e.target.value); setError(""); }}
               placeholder="e.g. Asterixsty Perfumery"
               maxLength={60}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-[#2a2f3d] bg-white dark:bg-[#1d212c] text-sm text-gray-800 dark:text-gray-200 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-600 focus:border-transparent transition-all"
               autoFocus
             />
           </div>
 
           {/* Theme color */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
               Theme Color
             </label>
             <div className="flex items-center gap-2 flex-wrap">
@@ -223,42 +223,42 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
                   type="button"
                   onClick={() => setColor(c)}
                   className={`w-7 h-7 rounded-lg transition-transform hover:scale-110 ${
-                    color === c ? "ring-2 ring-offset-1 ring-gray-400 scale-110" : ""
+                    color === c ? "ring-2 ring-offset-1 ring-gray-400 dark:ring-gray-500 scale-110" : ""
                   }`}
                   style={{ background: c }}
                   title={c}
                 />
               ))}
               {/* Custom color input */}
-              <label className="relative w-7 h-7 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-gray-400 transition-colors overflow-hidden" title="Custom color">
+              <label className="relative w-7 h-7 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2a2f3d] flex items-center justify-center cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors overflow-hidden" title="Custom color">
                 <input
                   type="color"
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
-                <span className="text-gray-400 text-xs font-bold leading-none">+</span>
+                <span className="text-gray-400 dark:text-gray-500 text-xs font-bold leading-none">+</span>
               </label>
             </div>
           </div>
 
           {/* Logo URL (optional) */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Logo URL <span className="text-gray-300 font-normal">(optional)</span>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
+              Logo URL <span className="text-gray-300 dark:text-gray-600 font-normal">(optional)</span>
             </label>
             <input
               type="url"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
               placeholder="https://example.com/logo.png"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-[#2a2f3d] bg-white dark:bg-[#1d212c] text-sm text-gray-800 dark:text-gray-200 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-600 focus:border-transparent transition-all"
             />
           </div>
 
           {/* Error */}
           {error && (
-            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+            <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 dark:text-red-400 px-3 py-2 rounded-lg">{error}</p>
           )}
 
           {/* Actions */}
@@ -267,7 +267,7 @@ function CreateWorkspaceModal({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-[#2a2f3d] text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1d212c] transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -320,7 +320,7 @@ export function WorkspaceSwitcher() {
   if (loading || !current) {
     return (
       <div className="px-3 py-2.5">
-        <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+        <div className="h-9 rounded-xl bg-gray-100 dark:bg-[#1d212c] animate-pulse" />
       </div>
     );
   }
@@ -341,24 +341,24 @@ export function WorkspaceSwitcher() {
         {/* Trigger */}
         <button
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 border border-gray-200 bg-white transition-colors group"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 border border-gray-200 bg-white dark:bg-[#151821] dark:border-[#2a2f3d] dark:hover:bg-[#1d212c] transition-colors group"
           aria-haspopup="listbox"
           aria-expanded={open}
         >
           <WsAvatar ws={current} size="md" />
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-[12px] font-semibold text-gray-800 truncate leading-tight">{current.name}</p>
-            <p className="text-[10px] text-gray-400 leading-tight">{roleLabel[current.role] ?? current.role}</p>
+            <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 truncate leading-tight">{current.name}</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{roleLabel[current.role] ?? current.role}</p>
           </div>
           <ChevronDown
-            className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            className={`text-gray-400 dark:text-gray-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           />
         </button>
 
         {/* Dropdown */}
         {open && (
-          <div className="absolute left-3 right-3 top-full z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden">
-            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+          <div className="absolute left-3 right-3 top-full z-50 mt-1 bg-white dark:bg-[#151821] border border-gray-200 dark:border-[#2a2f3d] rounded-xl shadow-lg dark:shadow-black/40 py-1 overflow-hidden">
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
               Workspaces
             </p>
             <ul role="listbox">
@@ -366,14 +366,14 @@ export function WorkspaceSwitcher() {
                 <li key={ws.id} role="option" aria-selected={ws.id === current.id}>
                   <button
                     onClick={() => { switchWorkspace(ws.id); setOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-[#1d212c] transition-colors text-left"
                   >
                     <WsAvatar ws={ws} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-gray-700 truncate">{ws.name}</p>
-                      <p className="text-[10px] text-gray-400">{roleLabel[ws.role] ?? ws.role}</p>
+                      <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 truncate">{ws.name}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500">{roleLabel[ws.role] ?? ws.role}</p>
                     </div>
-                    {ws.id === current.id && <CheckIcon className="text-indigo-500" />}
+                    {ws.id === current.id && <CheckIcon className="text-indigo-500 dark:text-indigo-400" />}
                   </button>
                 </li>
               ))}
@@ -382,10 +382,10 @@ export function WorkspaceSwitcher() {
             {/* New workspace — only for owners */}
             {canCreate && (
               <>
-                <div className="h-px bg-gray-100 mx-2 my-1" />
+                <div className="h-px bg-gray-100 dark:bg-[#1e2333] mx-2 my-1" />
                 <button
                   onClick={openCreate}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-indigo-500 hover:bg-indigo-50 transition-colors font-medium"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors font-medium"
                 >
                   <PlusIcon className="text-indigo-400" />
                   New workspace

@@ -94,14 +94,17 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id            Int       @id @default(autoincrement())
-  workspaceId   Int
-  userId        String?                        // null for pending invites; filled on first login
-  inviteEmail   String    @default("")         // email used to invite (before they sign up)
-  role          String    @default("VIEWER")   // OWNER | ADMIN | OPERATIONS | SPECIALIST | ANALYST | VIEWER | CLIENT
-  status        String    @default("active")   // active | invited | disabled
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  workspaceId     Int
+  userId          String?                        // null for pending invites; filled on first login
+  inviteEmail     String    @default("")         // email used to invite (before they sign up)
+  invitedByName   String    @default("")         // display name of the person who sent the invite
+  role            String    @default("VIEWER")   // OWNER | ADMIN | OPERATIONS | SPECIALIST | ANALYST | VIEWER | CLIENT
+  status          String    @default("active")   // active | invited | expired | revoked
+  inviteToken     String?   @unique              // secure one-time token in invitation email link
+  inviteExpiresAt DateTime?                      // 7 days after invite; null = no expiry
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user             User?            @relation(fields: [userId], references: [id])

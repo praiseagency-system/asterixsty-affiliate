@@ -32,26 +32,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!user.id || !user.email) return;
 
       // ── Accept pending workspace invitations for this email ────────────────
-      // Pending invites use userId = null so the FK and @@unique constraints
-      // are never violated. On first login we flip them to active with the real
-      // userId. If a concurrent active row already exists for the same
-      // (workspaceId, userId) we skip that workspace rather than crash.
+      // Pending invites use userId = null. On Google sign-in we flip any
+      // matching (non-expired, non-revoked) invite to active.
       const pendingInvites = await prisma.workspaceMember.findMany({
         where: { inviteEmail: user.email, status: "invited" },
       });
       for (const invite of pendingInvites) {
         try {
+          // Skip expired invites (mark as expired instead of accepting)
+          if (invite.inviteExpiresAt && invite.inviteExpiresAt < new Date()) {
+            await prisma.workspaceMember.update({
+              where: { id: invite.id },
+              data:  { status: "expired" },
+            });
+            continue;
+          }
           // Check if user is already an active member of this workspace
           const existing = await prisma.workspaceMember.findFirst({
             where: { workspaceId: invite.workspaceId, userId: user.id },
           });
           if (existing) {
-            // Already a member — just delete the stale pending invite
+            // Already a member — delete the stale pending invite
             await prisma.workspaceMember.delete({ where: { id: invite.id } });
           } else {
             await prisma.workspaceMember.update({
               where: { id: invite.id },
-              data:  { userId: user.id, status: "active" },
+              data:  { userId: user.id, status: "active", inviteToken: null },
             });
           }
         } catch (err) {

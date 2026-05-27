@@ -15,6 +15,8 @@ import {
   ALL_ROLES,
   type Permission,
 } from "@/lib/permissions";
+import { sendInviteEmail } from "@/lib/email";
+import { generateInviteToken, inviteExpiresAt } from "@/lib/invite-token";
 
 export const dynamic = "force-dynamic";
 
@@ -143,8 +145,8 @@ export async function POST(req: Request) {
 
         // Requester must be OWNER or ADMIN and have INVITE_MEMBER permission in THIS workspace
         const selfMember = await tx.workspaceMember.findFirst({
-          where: { workspaceId, userId: check.userId, status: "active" },
-          include: { userPermissions: true },
+          where:   { workspaceId, userId: check.userId, status: "active" },
+          include: { userPermissions: true, user: { select: { name: true } } },
         });
         if (!selfMember) {
           throw Object.assign(
@@ -191,15 +193,27 @@ export async function POST(req: Request) {
             where: { workspaceId, inviteEmail: email, status: "invited" },
           });
           if (existingInvite) {
+            // Refresh token + expiry when re-inviting
+            const newToken = generateInviteToken();
             await tx.workspaceMember.update({
               where: { id: existingInvite.id },
-              data:  { role },
+              data:  { role, inviteToken: newToken, inviteExpiresAt: inviteExpiresAt() },
             });
             memberId = existingInvite.id;
             action   = "invite_updated";
           } else {
+            const token   = generateInviteToken();
             const created = await tx.workspaceMember.create({
-              data: { workspaceId, userId: null, inviteEmail: email, role, status: "invited" },
+              data: {
+                workspaceId,
+                userId:         null,
+                inviteEmail:    email,
+                invitedByName:  selfMember.user?.name ?? check.userId,
+                role,
+                status:         "invited",
+                inviteToken:    token,
+                inviteExpiresAt: inviteExpiresAt(),
+              },
             });
             memberId = created.id;
             action   = "invite_created";
@@ -238,6 +252,37 @@ export async function POST(req: Request) {
         invite_updated: "Invitation role updated",
       }[r.action] ?? r.action,
     }));
+
+    // ── Send invitation emails (non-blocking, fire-and-forget) ─────────────
+    // Fetch workspace details for pending invites that were just created/updated
+    const pendingResults = results.filter((r) =>
+      r.action === "invite_created" || r.action === "invite_updated",
+    );
+    if (pendingResults.length > 0) {
+      // Get all members with email tokens to send
+      const members = await prisma.workspaceMember.findMany({
+        where: {
+          workspaceId: { in: pendingResults.map((r) => r.workspaceId) },
+          inviteEmail: email,
+          status:      "invited",
+          inviteToken: { not: null },
+        },
+        include: { workspace: { select: { name: true, logoUrl: true } } },
+      });
+
+      // Fire emails without awaiting to not slow down the API response
+      for (const m of members) {
+        sendInviteEmail({
+          to:            email,
+          invitedByName: m.invitedByName || "Your team",
+          workspaceName: m.workspace.name,
+          workspaceLogo: m.workspace.logoUrl || undefined,
+          role:          m.role,
+          inviteToken:   m.inviteToken!,
+          lang:          "en", // TODO: use workspace language setting
+        }).catch((err) => console.error("[email] Failed to send invite:", err));
+      }
+    }
 
     return NextResponse.json({ ok: true, results: summary }, { status: 201 });
 

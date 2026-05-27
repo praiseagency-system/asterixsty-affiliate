@@ -4,7 +4,9 @@ import "./globals.css";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import { PermissionProvider } from "@/contexts/PermissionContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AuthProvider } from "@/components/AuthProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { AppShell } from "@/components/AppShell";
 import { auth } from "@/auth";
 
@@ -19,19 +21,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await auth();
 
   return (
-    <html lang="id" className="h-full">
-      <body className={`${inter.className} h-full bg-gray-50 text-gray-900`}>
-        <AuthProvider session={session}>
-          <BrandingProvider>
-            <WorkspaceProvider userId={session?.user?.id}>
-              {/* PermissionProvider must be INSIDE WorkspaceProvider so it can
-                  read current?.id from WorkspaceContext */}
-              <PermissionProvider>
-                <AppShell>{children}</AppShell>
-              </PermissionProvider>
-            </WorkspaceProvider>
-          </BrandingProvider>
-        </AuthProvider>
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className={`${inter.className} h-full`}>
+        {/* ThemeProvider must wrap everything so next-themes can set class on <html> */}
+        <ThemeProvider>
+          <LanguageProvider>
+            <AuthProvider session={session}>
+              <BrandingProvider>
+                <WorkspaceProvider userId={session?.user?.id}>
+                  <PermissionProvider>
+                    <AppShell>{children}</AppShell>
+                  </PermissionProvider>
+                </WorkspaceProvider>
+              </BrandingProvider>
+            </AuthProvider>
+          </LanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

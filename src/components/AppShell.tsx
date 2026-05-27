@@ -21,9 +21,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-gray-50 dark:bg-[#0f1115]">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-[#f4f5f7] dark:bg-[#0f1115]">
         {/*
           key={current?.id} forces every page component to unmount + remount
           whenever the active workspace changes, so all useEffect(() => fetchData(), [])
