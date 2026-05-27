@@ -36,18 +36,18 @@
 }
 
 .dark {
-  /* Premium SaaS dark palette — Linear × Notion × Shopify Admin */
-  --bg-app:         #0B0F19;
-  --bg-surface:     #111827;
-  --bg-subtle:      #1A2234;
-  --bg-border:      #1F2937;
-  --text-primary:   #F9FAFB;
-  --text-muted:     #9CA3AF;
-  --text-faint:     #6B7280;
+  /* Deep navy palette — Linear × Retool × Vercel */
+  --bg-app:         #071120;
+  --bg-surface:     #0F1B2D;
+  --bg-subtle:      #111C30;
+  --bg-border:      rgba(255,255,255,0.08);
+  --text-primary:   #F8FAFC;
+  --text-muted:     #94A3B8;
+  --text-faint:     #64748B;
   --accent:         #6366f1;
   --accent-hover:   #818cf8;
-  --sidebar-bg:     #0B0F19;
-  --sidebar-border: #1F2937;
+  --sidebar-bg:     #071120;
+  --sidebar-border: rgba(255,255,255,0.06);
 }
 
 body {
@@ -57,11 +57,85 @@ body {
   transition:  background-color 200ms ease, color 200ms ease;
 }
 
+/* ── Global dark mode overrides — legacy light-mode Tailwind classes ─────────
+   Using @layer base ensures explicit dark:* utility classes always win
+   (Tailwind v4: utilities > components > base). This covers the 40+ pages
+   that still reference bg-white, bg-gray-50, text-gray-900, etc. without
+   individual per-file dark: variants.                                         */
+@layer base {
+  /* Backgrounds */
+  .dark .bg-white       { background-color: var(--bg-surface) !important; }
+  .dark .bg-gray-50     { background-color: var(--bg-subtle)  !important; }
+  .dark .bg-gray-100    { background-color: rgba(255,255,255,0.05) !important; }
+  .dark .bg-gray-200    { background-color: rgba(255,255,255,0.08) !important; }
+
+  /* Borders */
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300 { border-color: var(--bg-border) !important; }
+
+  /* Dividers */
+  .dark .divide-gray-100 > * + *,
+  .dark .divide-gray-200 > * + * { border-color: var(--bg-border) !important; }
+
+  /* Text */
+  .dark .text-gray-900,
+  .dark .text-gray-800  { color: var(--text-primary) !important; }
+  .dark .text-gray-700,
+  .dark .text-gray-600  { color: var(--text-muted)   !important; }
+  .dark .text-gray-500,
+  .dark .text-gray-400,
+  .dark .text-gray-300  { color: var(--text-faint)   !important; }
+  .dark .text-black     { color: var(--text-primary) !important; }
+
+  /* Table rows */
+  .dark table           { color: var(--text-primary); }
+  .dark thead           { background-color: rgba(255,255,255,0.03); }
+  .dark th              { color: var(--text-muted); border-color: var(--bg-border); }
+  .dark td              { border-color: var(--bg-border); }
+  .dark tbody tr:hover  { background-color: rgba(99,102,241,0.08); }
+}
+
+/* ── Form elements — dark mode (unlayered = highest priority) ───────────────
+   Covers all input types, textareas, and selects. Unlayered so it beats
+   Tailwind utility classes but can still be overridden by inline styles.     */
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="number"],
+.dark input[type="tel"],
+.dark input[type="url"],
+.dark input[type="search"],
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="time"],
+.dark input:not([type]),
+.dark textarea,
+.dark select {
+  background-color: var(--bg-subtle);
+  border-color:     var(--bg-border);
+  color:            var(--text-primary);
+  color-scheme: dark;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: var(--text-faint); }
+.dark select option {
+  background-color: var(--bg-surface);
+  color:            var(--text-primary);
+}
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  outline:     none;
+  border-color: var(--accent);
+  box-shadow:  0 0 0 3px rgba(99,102,241,0.18);
+}
+
 /* ── Scrollbar (dark mode) ──────────────────────────────────────────────────*/
 .dark ::-webkit-scrollbar { width: 6px; height: 6px; }
 .dark ::-webkit-scrollbar-track { background: transparent; }
-.dark ::-webkit-scrollbar-thumb { background: #1F2937; border-radius: 100px; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #374151; }
+.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 100px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
 /* ── Period Picker entrance animation ───────────────────────────────────── */
 @keyframes picker-enter {

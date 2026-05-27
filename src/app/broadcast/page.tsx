@@ -978,11 +978,11 @@ Yuk gas upload konten terbaik kamu 🚀"
         <div className="space-y-3">
           <div className="bg-[#ECE5DD] rounded-2xl p-4 space-y-2">
             <p className="text-xs text-gray-500 font-semibold">WhatsApp Preview — creator123</p>
-            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-sm max-w-xs">
-              <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+            <div className="bg-[#ffffff] rounded-xl rounded-tl-sm px-4 py-3 shadow-sm max-w-xs">
+              <p className="text-sm text-[#1f2937] whitespace-pre-wrap leading-relaxed">
                 {resolvePreview(message, { username: "creator123", nama: "Budi Santoso" }, campaignVars)}
               </p>
-              <p className="text-[10px] text-gray-400 mt-2 text-right">12:00 ✓✓</p>
+              <p className="text-[10px] text-[#9ca3af] mt-2 text-right">12:00 ✓✓</p>
             </div>
           </div>
           {campaignVars && (
