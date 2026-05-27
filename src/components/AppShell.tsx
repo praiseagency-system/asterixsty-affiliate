@@ -3,12 +3,13 @@
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { PermissionDebugPanel } from "@/components/PermissionDebugPanel";
 
 // Routes that should render without the app shell (no sidebar)
 const SHELL_LESS_ROUTES = ["/login"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname  = usePathname();
+  const pathname    = usePathname();
   const { current } = useWorkspace();
 
   const isShellLess = SHELL_LESS_ROUTES.some(
@@ -32,6 +33,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      {/* Dev-only permission debug panel — toggle with 🔐 button (bottom-right) */}
+      <PermissionDebugPanel />
     </div>
   );
 }

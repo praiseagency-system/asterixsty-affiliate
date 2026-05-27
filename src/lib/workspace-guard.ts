@@ -17,11 +17,13 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest } from "next/server";
 
 const ROLE_RANK: Record<string, number> = {
-  OWNER: 5,
-  ADMIN: 4,
-  OPERATIONS: 3,
-  SPECIALIST: 2,
-  VIEWER: 1,
+  OWNER:      7,
+  ADMIN:      6,
+  OPERATIONS: 5,
+  SPECIALIST: 4,
+  ANALYST:    3,
+  VIEWER:     2,
+  CLIENT:     1,
 };
 
 export interface WorkspaceGuardOk {

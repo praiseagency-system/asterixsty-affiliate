@@ -98,18 +98,35 @@ model WorkspaceMember {
   workspaceId   Int
   userId        String?                        // null for pending invites; filled on first login
   inviteEmail   String    @default("")         // email used to invite (before they sign up)
-  role          String    @default("VIEWER")   // OWNER | ADMIN | SPECIALIST | OPERATIONS | VIEWER
+  role          String    @default("VIEWER")   // OWNER | ADMIN | OPERATIONS | SPECIALIST | ANALYST | VIEWER | CLIENT
   status        String    @default("active")   // active | invited | disabled
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user          User?     @relation(fields: [userId], references: [id])
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?            @relation(fields: [userId], references: [id])
+  userPermissions  UserPermission[]
 
   // NULL userId is allowed for pending invites; PostgreSQL treats NULL != NULL so
   // multiple pending rows per workspace are fine. Duplicate active members are
   // prevented by application logic (upsert when real user already exists).
   @@unique([workspaceId, userId])
+}
+
+// Granular per-user per-workspace permission overrides.
+// granted = true  → explicitly grant this permission (even if role doesn't include it)
+// granted = false → explicitly deny  this permission (even if role includes it)
+// No row = inherit role default
+model UserPermission {
+  id                Int             @id @default(autoincrement())
+  workspaceMemberId Int
+  permission        String          // e.g. "view_affiliate", "create_broadcast"
+  granted           Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+
+  member            WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceMemberId, permission])
 }
 
 model Product {

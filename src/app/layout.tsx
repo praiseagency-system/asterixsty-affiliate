@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
+import { PermissionProvider } from "@/contexts/PermissionContext";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { auth } from "@/auth";
@@ -23,7 +24,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AuthProvider session={session}>
           <BrandingProvider>
             <WorkspaceProvider userId={session?.user?.id}>
-              <AppShell>{children}</AppShell>
+              {/* PermissionProvider must be INSIDE WorkspaceProvider so it can
+                  read current?.id from WorkspaceContext */}
+              <PermissionProvider>
+                <AppShell>{children}</AppShell>
+              </PermissionProvider>
             </WorkspaceProvider>
           </BrandingProvider>
         </AuthProvider>

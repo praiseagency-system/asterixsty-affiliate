@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useBranding } from "@/contexts/BrandingContext";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { usePermission } from "@/contexts/PermissionContext";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── SVG Icon primitives ──────────────────────────────────────────────────────
 function Icon({ d, className = "" }: { d: string | readonly string[]; className?: string }) {
@@ -27,61 +29,82 @@ function Icon({ d, className = "" }: { d: string | readonly string[]; className?
 }
 
 const ICONS = {
-  dashboard:   "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
-  affiliate:   ["M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"],
-  monitoring:  ["M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"],
-  content:     ["M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"],
-  program:     "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
-  datasystem:  ["M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7", "M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4", "M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4", "M4 12c0 2.21 3.582 4 8 4s8-1.79 8-4"],
-  chevron:     "M19 9l-7 7-7-7",
+  dashboard:  "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+  affiliate:  ["M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"],
+  monitoring: ["M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"],
+  content:    ["M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"],
+  program:    "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
+  datasystem: ["M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7", "M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4", "M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4", "M4 12c0 2.21 3.582 4 8 4s8-1.79 8-4"],
+  chevron:    "M19 9l-7 7-7-7",
 } as const;
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
-interface SubChildLink { href: string; label: string; tabParam?: string; }
-interface ChildLink    { href: string; label: string; emoji: string; subChildren?: SubChildLink[]; }
-interface GroupConfig  { id: string; label: string; iconKey: keyof typeof ICONS; children: ChildLink[]; }
+interface SubChildLink {
+  href:      string;
+  label:     string;
+  tabParam?: string;
+}
+interface ChildLink {
+  href:         string;
+  label:        string;
+  emoji:        string;
+  permission?:  string;   // required permission to SEE this item
+  subChildren?: SubChildLink[];
+}
+interface GroupConfig {
+  id:         string;
+  label:      string;
+  iconKey:    keyof typeof ICONS;
+  permission: string;   // at least one of the children must be visible
+  children:   ChildLink[];
+}
 
 const GROUPS: GroupConfig[] = [
   {
-    id: "affiliate",
-    label: "Affiliate Management",
-    iconKey: "affiliate",
+    id:         "affiliate",
+    label:      "Affiliate Management",
+    iconKey:    "affiliate",
+    permission: PERMISSIONS.VIEW_AFFILIATE,
     children: [
-      { href: "/listing",         label: "Affiliate Scouting",  emoji: "🔍" },
-      { href: "/database",        label: "Database Affiliate",  emoji: "🗂️" },
-      { href: "/sample-delivery", label: "Kirim Sample",        emoji: "📦" },
-      { href: "/broadcast",       label: "Broadcast Engine",    emoji: "📢" },
+      { href: "/listing",         label: "Affiliate Scouting", emoji: "🔍", permission: PERMISSIONS.VIEW_AFFILIATE  },
+      { href: "/database",        label: "Database Affiliate", emoji: "🗂️", permission: PERMISSIONS.VIEW_AFFILIATE  },
+      { href: "/sample-delivery", label: "Kirim Sample",       emoji: "📦", permission: PERMISSIONS.VIEW_SAMPLE     },
+      { href: "/broadcast",       label: "Broadcast Engine",   emoji: "📢", permission: PERMISSIONS.VIEW_BROADCAST  },
     ],
   },
   {
-    id: "monitoring",
-    label: "Monitoring",
-    iconKey: "monitoring",
+    id:         "monitoring",
+    label:      "Monitoring",
+    iconKey:    "monitoring",
+    permission: PERMISSIONS.VIEW_MONITORING,
     children: [
-      { href: "/import",                label: "Import Data",         emoji: "📥" },
-      { href: "/monitoring/mingguan",   label: "Monitoring Mingguan", emoji: "📅" },
-      { href: "/monitoring/bulanan",    label: "Monitoring Bulanan",  emoji: "📆" },
+      { href: "/import",              label: "Import Data",         emoji: "📥", permission: PERMISSIONS.VIEW_MONITORING },
+      { href: "/monitoring/mingguan", label: "Monitoring Mingguan", emoji: "📅", permission: PERMISSIONS.VIEW_MONITORING },
+      { href: "/monitoring/bulanan",  label: "Monitoring Bulanan",  emoji: "📆", permission: PERMISSIONS.VIEW_MONITORING },
     ],
   },
   {
-    id: "content",
-    label: "Content Intelligence",
-    iconKey: "content",
+    id:         "content",
+    label:      "Content Intelligence",
+    iconKey:    "content",
+    permission: PERMISSIONS.VIEW_CONTENT,
     children: [
-      { href: "/video-referensi", label: "Referensi Video", emoji: "📹" },
-      { href: "/hooks",           label: "Hook Formula",    emoji: "💡" },
+      { href: "/video-referensi", label: "Referensi Video", emoji: "📹", permission: PERMISSIONS.VIEW_CONTENT },
+      { href: "/hooks",           label: "Hook Formula",    emoji: "💡", permission: PERMISSIONS.VIEW_CONTENT },
     ],
   },
   {
-    id: "program",
-    label: "Program Center",
-    iconKey: "program",
+    id:         "program",
+    label:      "Program Center",
+    iconKey:    "program",
+    permission: PERMISSIONS.VIEW_CAMPAIGN,
     children: [
-      { href: "/tiered", label: "Tiered Program", emoji: "🏆" },
+      { href: "/tiered",            label: "Tiered Program", emoji: "🏆", permission: PERMISSIONS.VIEW_CAMPAIGN },
       {
-        href: "/program/campaigns",
-        label: "Campaigns",
-        emoji: "🎯",
+        href:       "/program/campaigns",
+        label:      "Campaigns",
+        emoji:      "🎯",
+        permission: PERMISSIONS.VIEW_CAMPAIGN,
         subChildren: [
           { href: "/program/campaigns",           label: "Draft",     tabParam: "Draft"   },
           { href: "/program/campaigns",           label: "Active",    tabParam: "Ongoing" },
@@ -89,21 +112,22 @@ const GROUPS: GroupConfig[] = [
           { href: "/program/campaigns/templates", label: "Templates"                      },
         ],
       },
-      { href: "/program/leaderboards", label: "Leaderboards", emoji: "📊" },
-      { href: "/program/rewards",      label: "Rewards",      emoji: "🎁" },
-      { href: "/program/analytics",    label: "Analytics",    emoji: "📈" },
+      { href: "/program/leaderboards", label: "Leaderboards", emoji: "📊", permission: PERMISSIONS.VIEW_CAMPAIGN },
+      { href: "/program/rewards",      label: "Rewards",      emoji: "🎁", permission: PERMISSIONS.VIEW_CAMPAIGN },
+      { href: "/program/analytics",    label: "Analytics",    emoji: "📈", permission: PERMISSIONS.VIEW_CAMPAIGN },
     ],
   },
   {
-    id: "datasystem",
-    label: "Data & System",
-    iconKey: "datasystem",
+    id:         "datasystem",
+    label:      "Data & System",
+    iconKey:    "datasystem",
+    permission: PERMISSIONS.EDIT_WORKSPACE,
     children: [
-      { href: "/master",             label: "Data Master",        emoji: "⚙️" },
-      { href: "/admin",              label: "Konfigurasi Sistem", emoji: "🔧" },
-      { href: "/automation",         label: "Automation Center",  emoji: "🤖" },
-      { href: "/branding",           label: "Branding Settings",  emoji: "🎨" },
-      { href: "/google-integration", label: "Google Integration", emoji: "🔗" },
+      { href: "/master",             label: "Data Master",        emoji: "⚙️", permission: PERMISSIONS.EDIT_WORKSPACE   },
+      { href: "/admin",              label: "Konfigurasi Sistem", emoji: "🔧", permission: PERMISSIONS.EDIT_WORKSPACE   },
+      { href: "/automation",         label: "Automation Center",  emoji: "🤖", permission: PERMISSIONS.MANAGE_WHATSAPP  },
+      { href: "/branding",           label: "Branding Settings",  emoji: "🎨", permission: PERMISSIONS.BRANDING_SETTINGS },
+      { href: "/google-integration", label: "Google Integration", emoji: "🔗", permission: PERMISSIONS.GOOGLE_INTEGRATION },
     ],
   },
 ];
@@ -111,11 +135,8 @@ const GROUPS: GroupConfig[] = [
 // ─── Sub-child link ───────────────────────────────────────────────────────────
 function SubChildItem({ sub, pathname }: { sub: SubChildLink; pathname: string }) {
   const isTemplates = sub.href === "/program/campaigns/templates";
-  const active      = isTemplates
-    ? pathname.startsWith("/program/campaigns/templates")
-    : false; // tab-param items don't get individual active highlight
-
-  const href = sub.tabParam ? `${sub.href}?tab=${sub.tabParam}` : sub.href;
+  const active      = isTemplates ? pathname.startsWith("/program/campaigns/templates") : false;
+  const href        = sub.tabParam ? `${sub.href}?tab=${sub.tabParam}` : sub.href;
 
   return (
     <Link
@@ -137,17 +158,23 @@ function SubChildItem({ sub, pathname }: { sub: SubChildLink; pathname: string }
 }
 
 // ─── Collapsible group ────────────────────────────────────────────────────────
-function CollapsibleGroup({ group, pathname }: { group: GroupConfig; pathname: string }) {
-  const isChildActive = group.children.some(
+function CollapsibleGroup({
+  group,
+  pathname,
+  visibleChildren,
+}: {
+  group:           GroupConfig;
+  pathname:        string;
+  visibleChildren: ChildLink[];
+}) {
+  const isChildActive = visibleChildren.some(
     (c) => pathname === c.href || pathname.startsWith(c.href + "/")
   );
   const [open, setOpen] = useState(isChildActive);
-
   useEffect(() => { if (isChildActive) setOpen(true); }, [isChildActive]);
 
-  // Estimate height: each child ~36px + sub-children ~28px each + 8px padding
-  const estimatedH = group.children.reduce((sum, c) => {
-    return sum + 36 + (c.subChildren && (pathname.startsWith(c.href)) ? c.subChildren.length * 28 + 4 : 0);
+  const estimatedH = visibleChildren.reduce((sum, c) => {
+    return sum + 36 + (c.subChildren && pathname.startsWith(c.href) ? c.subChildren.length * 28 + 4 : 0);
   }, 8);
 
   return (
@@ -178,17 +205,20 @@ function CollapsibleGroup({ group, pathname }: { group: GroupConfig; pathname: s
 
       <div
         style={{
-          maxHeight: open ? `${estimatedH}px` : "0",
-          overflow: "hidden",
+          maxHeight:  open ? `${estimatedH}px` : "0",
+          overflow:   "hidden",
           transition: "max-height 240ms cubic-bezier(0.4,0,0.2,1)",
         }}
       >
         <div className="relative ml-5 pl-3 pb-1 border-l border-gray-100">
-          {group.children.map((child) => {
+          {visibleChildren.map((child) => {
             const active =
               pathname === child.href || pathname.startsWith(child.href + "/");
             const showSubChildren =
-              child.subChildren && (pathname.startsWith(child.href + "/") || pathname === child.href || pathname.startsWith("/program/campaigns"));
+              child.subChildren &&
+              (pathname.startsWith(child.href + "/") ||
+                pathname === child.href ||
+                pathname.startsWith("/program/campaigns"));
 
             return (
               <div key={child.href}>
@@ -207,7 +237,6 @@ function CollapsibleGroup({ group, pathname }: { group: GroupConfig; pathname: s
                   <span className="truncate">{child.label}</span>
                 </Link>
 
-                {/* Sub-children (e.g. Campaigns → Draft / Active / Ended / Templates) */}
                 {child.subChildren && showSubChildren && (
                   <div className="ml-4 mb-1 pl-2 border-l border-gray-100 space-y-0.5">
                     {child.subChildren.map((sub) => (
@@ -230,10 +259,11 @@ function CollapsibleGroup({ group, pathname }: { group: GroupConfig; pathname: s
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 export default function Sidebar() {
-  const pathname = usePathname();
+  const pathname    = usePathname();
   const isDashboard = pathname === "/";
-  const { brand } = useBranding();
+  const { brand }   = useBranding();
   const { data: session } = useSession();
+  const { can, canAny, loading: permLoading } = usePermission();
 
   const brandName   = brand.brandName   || "ASTERIXSTY";
   const brandSystem = brand.brandSystem || "Affiliate Manager";
@@ -274,47 +304,77 @@ export default function Sidebar() {
 
       {/* ── Nav ── */}
       <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-0.5">
-        <Link
-          href="/"
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 mb-2 ${
-            isDashboard
-              ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-          }`}
-        >
-          <Icon d={ICONS.dashboard} className={isDashboard ? "text-indigo-100" : "text-gray-400"} />
-          <span>Dashboard</span>
-        </Link>
 
-        <div className="h-px bg-gray-100 mx-1 mb-2" />
+        {/* Dashboard — visible to all authenticated members */}
+        {can(PERMISSIONS.VIEW_DASHBOARD) && (
+          <Link
+            href="/"
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 mb-2 ${
+              isDashboard
+                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <Icon d={ICONS.dashboard} className={isDashboard ? "text-indigo-100" : "text-gray-400"} />
+            <span>Dashboard</span>
+          </Link>
+        )}
 
-        {GROUPS.map((group) => (
-          <CollapsibleGroup key={group.id} group={group} pathname={pathname} />
-        ))}
+        {can(PERMISSIONS.VIEW_DASHBOARD) && <div className="h-px bg-gray-100 mx-1 mb-2" />}
 
-        {/* Team management link */}
-        <div className="h-px bg-gray-100 mx-1 my-2" />
-        <Link
-          href="/team"
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-            pathname.startsWith("/team")
-              ? "bg-indigo-50 text-indigo-700"
-              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
-          }`}
-        >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-          </svg>
-          <span>Team Management</span>
-        </Link>
+        {/* Permission-gated groups */}
+        {!permLoading && GROUPS.map((group) => {
+          // Filter children user has permission to see
+          const visibleChildren = group.children.filter((c) =>
+            !c.permission || canAny(c.permission),
+          );
+          if (visibleChildren.length === 0) return null;
+
+          return (
+            <CollapsibleGroup
+              key={group.id}
+              group={group}
+              pathname={pathname}
+              visibleChildren={visibleChildren}
+            />
+          );
+        })}
+
+        {/* Team Management */}
+        {canAny(PERMISSIONS.VIEW_TEAM, PERMISSIONS.INVITE_MEMBER) && (
+          <>
+            <div className="h-px bg-gray-100 mx-1 my-2" />
+            <Link
+              href="/team"
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                pathname.startsWith("/team")
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+              }`}
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+              </svg>
+              <span>Team Management</span>
+            </Link>
+          </>
+        )}
+
+        {/* Permissions still loading — skeleton shimmer */}
+        {permLoading && (
+          <div className="space-y-2 px-1 py-2">
+            {[80, 65, 72, 58].map((w, i) => (
+              <div key={i} className={`h-8 rounded-xl bg-gray-100 animate-pulse`} style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* ── User footer ── */}
       <div className="px-3 py-3 border-t border-gray-100">
         <div className="flex items-center gap-2.5 px-2 py-2">
-          {/* Avatar */}
           {userImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={userImage} alt={userName} className="w-8 h-8 rounded-full border border-gray-100 shrink-0 object-cover" referrerPolicy="no-referrer" />
@@ -323,12 +383,10 @@ export default function Sidebar() {
               <span className="text-white text-xs font-semibold">{userName.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
-          {/* Name + email */}
           <div className="flex-1 min-w-0">
             <p className="text-[12px] font-semibold text-gray-800 truncate leading-tight">{userName}</p>
             <p className="text-[10px] text-gray-400 truncate leading-tight">{userEmail}</p>
           </div>
-          {/* Logout */}
           {session && (
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
