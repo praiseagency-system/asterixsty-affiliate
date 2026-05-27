@@ -253,13 +253,14 @@ export async function POST(req: Request) {
       }[r.action] ?? r.action,
     }));
 
-    // ── Send invitation emails (non-blocking, fire-and-forget) ─────────────
-    // Fetch workspace details for pending invites that were just created/updated
+    // ── Send invitation emails (awaited — errors surfaced in response) ─────────
     const pendingResults = results.filter((r) =>
       r.action === "invite_created" || r.action === "invite_updated",
     );
+
+    const emailResults: { workspaceId: number; ok: boolean; error?: string }[] = [];
+
     if (pendingResults.length > 0) {
-      // Get all members with email tokens to send
       const members = await prisma.workspaceMember.findMany({
         where: {
           workspaceId: { in: pendingResults.map((r) => r.workspaceId) },
@@ -267,24 +268,39 @@ export async function POST(req: Request) {
           status:      "invited",
           inviteToken: { not: null },
         },
-        include: { workspace: { select: { name: true, logoUrl: true } } },
+        include: { workspace: { select: { id: true, name: true, logoUrl: true } } },
       });
 
-      // Fire emails without awaiting to not slow down the API response
       for (const m of members) {
-        sendInviteEmail({
+        console.log("[email] Sending invite: to=%s ws=%s role=%s token=%s...",
+          email, m.workspace.name, m.role, (m.inviteToken ?? "").slice(0, 8));
+        const r = await sendInviteEmail({
           to:            email,
           invitedByName: m.invitedByName || "Your team",
           workspaceName: m.workspace.name,
           workspaceLogo: m.workspace.logoUrl || undefined,
           role:          m.role,
           inviteToken:   m.inviteToken!,
-          lang:          "en", // TODO: use workspace language setting
-        }).catch((err) => console.error("[email] Failed to send invite:", err));
+          lang:          "en",
+        });
+        if (r.ok) {
+          console.log("[email] ✓ Delivered to %s (ws=%s)", email, m.workspace.name);
+        } else {
+          console.error("[email] ✗ Failed for %s (ws=%s): %s", email, m.workspace.name, r.error);
+        }
+        emailResults.push({ workspaceId: m.workspace.id, ok: r.ok, error: r.error });
       }
     }
 
-    return NextResponse.json({ ok: true, results: summary }, { status: 201 });
+    return NextResponse.json({
+      ok:      true,
+      results: summary,
+      email: {
+        sent:   emailResults.filter((e) => e.ok).length,
+        failed: emailResults.filter((e) => !e.ok).length,
+        errors: emailResults.filter((e) => !e.ok).map((e) => e.error).filter(Boolean),
+      },
+    }, { status: 201 });
 
   } catch (err) {
     const message = errorMsg(err);

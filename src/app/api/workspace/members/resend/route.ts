@@ -50,8 +50,11 @@ export async function POST(req: Request) {
     data:  { inviteToken: newToken, inviteExpiresAt: inviteExpiresAt() },
   });
 
-  // Send the email (fire-and-forget on error)
-  sendInviteEmail({
+  // Send the email (awaited — surface real error to caller)
+  console.log("[resend] Sending: to=%s ws=%s role=%s token=%s...",
+    member.inviteEmail, member.workspace.name, member.role, newToken.slice(0, 8));
+
+  const emailResult = await sendInviteEmail({
     to:            member.inviteEmail,
     invitedByName: member.invitedByName || "Your team",
     workspaceName: member.workspace.name,
@@ -59,9 +62,16 @@ export async function POST(req: Request) {
     role:          member.role,
     inviteToken:   newToken,
     lang:          "en",
-  }).catch((err) => console.error("[email] Failed to resend invite:", err));
+  });
 
-  console.log("[resend] invite for %s in ws=%d by %s", member.inviteEmail, workspaceId, check.userId);
+  if (!emailResult.ok) {
+    console.error("[resend] ✗ Delivery failed for %s: %s", member.inviteEmail, emailResult.error);
+    return NextResponse.json({
+      ok:    false,
+      error: emailResult.error ?? "Email delivery failed",
+    }, { status: 502 });
+  }
 
+  console.log("[resend] ✓ Sent to %s in ws=%d by %s", member.inviteEmail, workspaceId, check.userId);
   return NextResponse.json({ ok: true });
 }

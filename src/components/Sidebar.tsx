@@ -146,7 +146,7 @@ function SubChildItem({ sub, pathname }: { sub: SubChildLink; pathname: string }
       className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
         active
           ? "text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-900/20"
-          : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-[#1d212c]"
+          : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:text-faint dark:hover:text-muted dark:hover:bg-subtle"
       }`}
     >
       {isTemplates ? (
@@ -188,7 +188,7 @@ function CollapsibleGroup({
         className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-150 group mb-0.5 ${
           isChildActive
             ? "text-indigo-600 bg-indigo-50/60 dark:text-indigo-400 dark:bg-indigo-900/20"
-            : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-[#1d212c]"
+            : "text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:text-faint dark:hover:text-muted dark:hover:bg-subtle"
         }`}
       >
         <Icon
@@ -218,7 +218,7 @@ function CollapsibleGroup({
           transition: "max-height 240ms cubic-bezier(0.4,0,0.2,1)",
         }}
       >
-        <div className="relative ml-5 pl-3 pb-1 border-l border-gray-100 dark:border-[#1e2333]">
+        <div className="relative ml-5 pl-3 pb-1 border-l border-gray-100 dark:border-border">
           {visibleChildren.map((child) => {
             const active =
               pathname === child.href || pathname.startsWith(child.href + "/");
@@ -235,7 +235,7 @@ function CollapsibleGroup({
                   className={`flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-sm font-medium transition-colors mb-0.5 ${
                     active
                       ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-subtle dark:hover:text-gray-200"
                   }`}
                 >
                   {active && (
@@ -246,7 +246,7 @@ function CollapsibleGroup({
                 </Link>
 
                 {child.subChildren && showSubChildren && (
-                  <div className="ml-4 mb-1 pl-2 border-l border-gray-100 dark:border-[#1e2333] space-y-0.5">
+                  <div className="ml-4 mb-1 pl-2 border-l border-gray-100 dark:border-border space-y-0.5">
                     {child.subChildren.map((sub) => (
                       <SubChildItem
                         key={sub.href + (sub.tabParam || "")}
@@ -286,10 +286,10 @@ export default function Sidebar() {
     <aside className="w-60 bg-surface border-r border-border flex flex-col shrink-0 h-full">
 
       {/* ── Brand header ── */}
-      <div className="px-4 py-4 border-b border-gray-100 dark:border-[#1e2333]">
+      <div className="px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2.5">
           {logoPath ? (
-            <div className="w-9 h-9 rounded-xl border border-gray-100 dark:border-[#2a2f3d] overflow-hidden shrink-0 bg-white dark:bg-[#1d212c] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl border border-border overflow-hidden shrink-0 bg-subtle flex items-center justify-center">
               <Image src={logoPath} alt={brandName} width={32} height={32} className="object-contain w-full h-full p-0.5" unoptimized />
             </div>
           ) : (
@@ -298,8 +298,8 @@ export default function Sidebar() {
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[10px] font-bold text-gray-300 dark:text-gray-600 uppercase tracking-[0.15em] truncate">{brandName}</p>
-            <h1 className="text-[13px] font-bold text-gray-800 dark:text-gray-100 leading-tight tracking-tight truncate">
+            <p className="text-[10px] font-bold text-faint uppercase tracking-[0.15em] truncate">{brandName}</p>
+            <h1 className="text-[13px] font-bold text-foreground leading-tight tracking-tight truncate">
               {brandSystem}
             </h1>
           </div>
@@ -307,7 +307,7 @@ export default function Sidebar() {
       </div>
 
       {/* ── Workspace switcher ── */}
-      <div className="border-b border-gray-100 dark:border-[#1e2333]">
+      <div className="border-b border-border">
         <WorkspaceSwitcher />
       </div>
 
@@ -321,7 +321,7 @@ export default function Sidebar() {
             className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 mb-2 ${
               isDashboard
                 ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200 dark:shadow-indigo-900/40"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-[#1d212c] dark:hover:text-white"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-subtle dark:hover:text-white"
             }`}
           >
             <Icon d={ICONS.dashboard} className={isDashboard ? "text-indigo-100" : "text-gray-400 dark:text-gray-500"} />
@@ -330,7 +330,7 @@ export default function Sidebar() {
         )}
 
         {can(PERMISSIONS.VIEW_DASHBOARD) && (
-          <div className="h-px bg-gray-100 dark:bg-[#1e2333] mx-1 mb-2" />
+          <div className="h-px bg-border mx-1 mb-2" />
         )}
 
         {/* Permission-gated groups */}
@@ -354,13 +354,13 @@ export default function Sidebar() {
         {/* Team Management */}
         {canAny(PERMISSIONS.VIEW_TEAM, PERMISSIONS.INVITE_MEMBER) && (
           <>
-            <div className="h-px bg-gray-100 dark:bg-[#1e2333] mx-1 my-2" />
+            <div className="h-px bg-border mx-1 my-2" />
             <Link
               href="/team"
               className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                 pathname.startsWith("/team")
                   ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-subtle dark:hover:text-gray-200"
               }`}
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -379,7 +379,7 @@ export default function Sidebar() {
           className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
             pathname === "/settings/appearance"
               ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
+              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-subtle dark:hover:text-gray-200"
           }`}
         >
           <Icon
@@ -391,55 +391,36 @@ export default function Sidebar() {
           <span>{t("nav.settings")}</span>
         </Link>
 
-        {/* Workspace Settings */}
-        <Link
-          href="/settings/workspace"
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-            pathname === "/settings/workspace"
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
-          }`}
-        >
-          <svg
-            className={`w-4 h-4 shrink-0 ${pathname === "/settings/workspace" ? "text-indigo-500 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"}`}
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
-          >
-            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </svg>
-          <span>{t("nav.workspaceSettings")}</span>
-        </Link>
-
         {/* Permissions still loading — skeleton shimmer */}
         {permLoading && (
           <div className="space-y-2 px-1 py-2">
             {[80, 65, 72, 58].map((w, i) => (
-              <div key={i} className="h-8 rounded-xl bg-gray-100 dark:bg-[#1d212c] animate-pulse" style={{ width: `${w}%` }} />
+              <div key={i} className="h-8 rounded-xl bg-subtle animate-pulse" style={{ width: `${w}%` }} />
             ))}
           </div>
         )}
       </nav>
 
       {/* ── User footer ── */}
-      <div className="px-3 py-3 border-t border-gray-100 dark:border-[#1e2333]">
+      <div className="px-3 py-3 border-t border-border">
         <div className="flex items-center gap-2.5 px-2 py-2">
           {userImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={userImage} alt={userName} className="w-8 h-8 rounded-full border border-gray-100 dark:border-[#2a2f3d] shrink-0 object-cover" referrerPolicy="no-referrer" />
+            <img src={userImage} alt={userName} className="w-8 h-8 rounded-full border border-border shrink-0 object-cover" referrerPolicy="no-referrer" />
           ) : (
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center shrink-0">
               <span className="text-white text-xs font-semibold">{userName.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 truncate leading-tight">{userName}</p>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate leading-tight">{userEmail}</p>
+            <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{userName}</p>
+            <p className="text-[10px] text-faint truncate leading-tight">{userEmail}</p>
           </div>
           {session && (
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
               title={t("common.signOut")}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-[#1d212c] transition-colors shrink-0"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-subtle transition-colors shrink-0"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
@@ -448,7 +429,7 @@ export default function Sidebar() {
           )}
         </div>
         <div className="flex items-center justify-between px-2 mt-1">
-          <p className="text-[10px] text-gray-300 dark:text-gray-600">by Praise · v2.0</p>
+          <p className="text-[10px] text-faint">by Praise · v2.0</p>
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 dark:bg-green-500" title="System online" />
         </div>
       </div>

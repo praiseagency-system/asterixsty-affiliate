@@ -36,18 +36,18 @@
 }
 
 .dark {
-  /* Modern SaaS dark palette — no pure black */
-  --bg-app:       #0f1115;
-  --bg-surface:   #151821;
-  --bg-subtle:    #1d212c;
-  --bg-border:    #2a2f3d;
-  --text-primary: #f1f5f9;
-  --text-muted:   #94a3b8;
-  --text-faint:   #64748b;
-  --accent:       #6366f1;
-  --accent-hover: #818cf8;
-  --sidebar-bg:   #0f1115;
-  --sidebar-border: #1e2333;
+  /* Premium SaaS dark palette — Linear × Notion × Shopify Admin */
+  --bg-app:         #0B0F19;
+  --bg-surface:     #111827;
+  --bg-subtle:      #1A2234;
+  --bg-border:      #1F2937;
+  --text-primary:   #F9FAFB;
+  --text-muted:     #9CA3AF;
+  --text-faint:     #6B7280;
+  --accent:         #6366f1;
+  --accent-hover:   #818cf8;
+  --sidebar-bg:     #0B0F19;
+  --sidebar-border: #1F2937;
 }
 
 body {
@@ -60,7 +60,7 @@ body {
 /* ── Scrollbar (dark mode) ──────────────────────────────────────────────────*/
 .dark ::-webkit-scrollbar { width: 6px; height: 6px; }
 .dark ::-webkit-scrollbar-track { background: transparent; }
-.dark ::-webkit-scrollbar-thumb { background: #2a2f3d; border-radius: 100px; }
+.dark ::-webkit-scrollbar-thumb { background: #1F2937; border-radius: 100px; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #374151; }
 
 /* ── Period Picker entrance animation ───────────────────────────────────── */

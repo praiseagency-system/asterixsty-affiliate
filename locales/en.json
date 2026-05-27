@@ -26,8 +26,7 @@
     "brandingSettings":   "Branding Settings",
     "googleIntegration":  "Google Integration",
     "teamManagement":     "Team Management",
-    "settings":           "Settings",
-    "workspaceSettings":  "Workspace Settings"
+    "settings":           "Settings"
   },
   "settings": {
     "title":              "Settings",
@@ -36,10 +35,12 @@
     "theme":              "Theme",
     "themeLight":         "Light",
     "themeDark":          "Dark",
-    "themeSystem":        "System",
     "languageEn":         "English",
     "languageId":         "Bahasa Indonesia",
-    "saved":              "Settings saved"
+    "saved":              "Settings saved",
+    "themeHint":          "Choose how the interface looks",
+    "languageHint":       "Interface language",
+    "preview":            "Preview"
   },
   "team": {
     "title":              "Team Management",
@@ -60,9 +61,15 @@
     "cancel":             "Cancel",
     "permissions":        "Permissions",
     "resend":             "Resend",
+    "resendSuccess":      "Invitation resent successfully",
+    "resendError":        "Failed to resend invitation",
+    "removeConfirm":      "Remove this member?",
+    "cancelInvite":       "Cancel invitation?",
     "noActiveMembers":    "No active members yet",
     "noPendingInvites":   "No pending invitations",
-    "inviteAnyone":       "Invite someone using the button above."
+    "inviteAnyone":       "Invite someone using the button above.",
+    "awaitingSignIn":     "awaiting sign-in",
+    "daysAgo":            "d ago"
   },
   "invite": {
     "step1Title":         "Email",
@@ -111,13 +118,43 @@
     "inactive":           "Inactive",
     "pending":            "Pending",
     "noWorkspace":        "No workspace selected",
-    "signOut":            "Sign out"
+    "signOut":            "Sign out",
+    "retry":              "Retry",
+    "close":              "Close",
+    "back":               "Back",
+    "next":               "Next",
+    "submit":             "Submit",
+    "sending":            "Sending...",
+    "saving":             "Saving...",
+    "deleting":           "Deleting...",
+    "copy":               "Copy",
+    "copied":             "Copied!",
+    "optional":           "Optional",
+    "required":           "Required",
+    "all":                "All",
+    "none":               "None",
+    "selectAll":          "Select all",
+    "clearAll":           "Clear all",
+    "enabled":            "Enabled",
+    "disabled":           "Disabled",
+    "on":                 "On",
+    "off":                "Off",
+    "preview":            "Preview",
+    "view":               "View",
+    "download":           "Download",
+    "refresh":            "Refresh",
+    "more":               "More"
   },
   "workspace": {
     "settings":           "Workspace Settings",
     "accentColor":        "Accent Color",
     "accentColorHint":    "Customize the accent color for this workspace",
     "saveColor":          "Save Color",
-    "colorSaved":         "Accent color updated"
+    "colorSaved":         "Accent color updated",
+    "name":               "Workspace Name",
+    "logo":               "Logo",
+    "members":            "Members",
+    "plan":               "Plan",
+    "danger":             "Danger Zone"
   }
 }

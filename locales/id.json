@@ -26,8 +26,7 @@
     "brandingSettings":   "Pengaturan Branding",
     "googleIntegration":  "Integrasi Google",
     "teamManagement":     "Manajemen Tim",
-    "settings":           "Pengaturan",
-    "workspaceSettings":  "Pengaturan Workspace"
+    "settings":           "Pengaturan"
   },
   "settings": {
     "title":              "Pengaturan",
@@ -36,10 +35,12 @@
     "theme":              "Tema",
     "themeLight":         "Terang",
     "themeDark":          "Gelap",
-    "themeSystem":        "Sistem",
     "languageEn":         "English",
     "languageId":         "Bahasa Indonesia",
-    "saved":              "Pengaturan tersimpan"
+    "saved":              "Pengaturan tersimpan",
+    "themeHint":          "Pilih tampilan antarmuka",
+    "languageHint":       "Bahasa antarmuka",
+    "preview":            "Pratinjau"
   },
   "team": {
     "title":              "Manajemen Tim",
@@ -60,9 +61,15 @@
     "cancel":             "Batal",
     "permissions":        "Izin",
     "resend":             "Kirim Ulang",
+    "resendSuccess":      "Undangan berhasil dikirim ulang",
+    "resendError":        "Gagal mengirim ulang undangan",
+    "removeConfirm":      "Hapus anggota ini?",
+    "cancelInvite":       "Batalkan undangan?",
     "noActiveMembers":    "Belum ada anggota aktif",
     "noPendingInvites":   "Tidak ada undangan tertunda",
-    "inviteAnyone":       "Undang seseorang menggunakan tombol di atas."
+    "inviteAnyone":       "Undang seseorang menggunakan tombol di atas.",
+    "awaitingSignIn":     "menunggu login",
+    "daysAgo":            "h lalu"
   },
   "invite": {
     "step1Title":         "Email",
@@ -111,13 +118,43 @@
     "inactive":           "Tidak Aktif",
     "pending":            "Tertunda",
     "noWorkspace":        "Tidak ada workspace dipilih",
-    "signOut":            "Keluar"
+    "signOut":            "Keluar",
+    "retry":              "Coba lagi",
+    "close":              "Tutup",
+    "back":               "Kembali",
+    "next":               "Lanjut",
+    "submit":             "Kirim",
+    "sending":            "Mengirim...",
+    "saving":             "Menyimpan...",
+    "deleting":           "Menghapus...",
+    "copy":               "Salin",
+    "copied":             "Tersalin!",
+    "optional":           "Opsional",
+    "required":           "Wajib",
+    "all":                "Semua",
+    "none":               "Tidak ada",
+    "selectAll":          "Pilih semua",
+    "clearAll":           "Hapus semua",
+    "enabled":            "Aktif",
+    "disabled":           "Nonaktif",
+    "on":                 "Nyala",
+    "off":                "Mati",
+    "preview":            "Pratinjau",
+    "view":               "Lihat",
+    "download":           "Unduh",
+    "refresh":            "Segarkan",
+    "more":               "Lainnya"
   },
   "workspace": {
     "settings":           "Pengaturan Workspace",
     "accentColor":        "Warna Aksen",
     "accentColorHint":    "Sesuaikan warna aksen untuk workspace ini",
     "saveColor":          "Simpan Warna",
-    "colorSaved":         "Warna aksen diperbarui"
+    "colorSaved":         "Warna aksen diperbarui",
+    "name":               "Nama Workspace",
+    "logo":               "Logo",
+    "members":            "Anggota",
+    "plan":               "Paket",
+    "danger":             "Zona Berbahaya"
   }
 }
