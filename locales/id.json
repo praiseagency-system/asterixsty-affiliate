@@ -26,7 +26,8 @@
     "brandingSettings":   "Pengaturan Branding",
     "googleIntegration":  "Integrasi Google",
     "teamManagement":     "Manajemen Tim",
-    "settings":           "Pengaturan"
+    "settings":           "Pengaturan",
+    "workspaceSettings":  "Pengaturan Workspace"
   },
   "settings": {
     "title":              "Pengaturan",
@@ -86,13 +87,37 @@
   "common": {
     "save":               "Simpan",
     "cancel":             "Batal",
-    "confirm":            "Konfirmasi",
+    "confirm":            "Apakah kamu yakin?",
     "delete":             "Hapus",
     "edit":               "Ubah",
-    "loading":            "Memuat…",
-    "noWorkspace":        "Tidak ada workspace dipilih",
-    "signOut":            "Keluar",
+    "add":                "Tambah",
+    "loading":            "Memuat...",
+    "error":              "Terjadi kesalahan",
+    "success":            "Berhasil disimpan",
+    "noData":             "Tidak ada data tersedia",
+    "search":             "Cari...",
+    "filter":             "Filter",
+    "export":             "Ekspor",
+    "import":             "Impor",
+    "actions":            "Aksi",
+    "status":             "Status",
+    "name":               "Nama",
+    "email":              "Email",
+    "role":               "Peran",
+    "date":               "Tanggal",
     "yes":                "Ya",
-    "no":                 "Tidak"
+    "no":                 "Tidak",
+    "active":             "Aktif",
+    "inactive":           "Tidak Aktif",
+    "pending":            "Tertunda",
+    "noWorkspace":        "Tidak ada workspace dipilih",
+    "signOut":            "Keluar"
+  },
+  "workspace": {
+    "settings":           "Pengaturan Workspace",
+    "accentColor":        "Warna Aksen",
+    "accentColorHint":    "Sesuaikan warna aksen untuk workspace ini",
+    "saveColor":          "Simpan Warna",
+    "colorSaved":         "Warna aksen diperbarui"
   }
 }

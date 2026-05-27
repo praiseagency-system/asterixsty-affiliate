@@ -5,12 +5,11 @@ import { useLanguage, type Lang } from "@/contexts/LanguageContext";
 import { useState, useEffect } from "react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
-type ThemeOption = "light" | "dark" | "system";
+type ThemeOption = "light" | "dark";
 
 const THEMES: { value: ThemeOption; icon: string; labelKey: string }[] = [
   { value: "light",  icon: "☀️",  labelKey: "settings.themeLight"  },
   { value: "dark",   icon: "🌙",  labelKey: "settings.themeDark"   },
-  { value: "system", icon: "💻",  labelKey: "settings.themeSystem" },
 ];
 
 const LANGS: { value: Lang; flag: string; labelKey: string }[] = [
@@ -55,7 +54,7 @@ export default function AppearancePage() {
         </div>
 
         {mounted && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {THEMES.map(({ value, icon, labelKey }) => {
               const active = theme === value;
               return (

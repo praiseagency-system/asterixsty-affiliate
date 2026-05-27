@@ -4,6 +4,21 @@
    next-themes sets class="dark" on <html>. This makes dark: utilities work. */
 @variant dark (&:where(.dark, .dark *));
 
+/* ── Tailwind v4 semantic color tokens ──────────────────────────────────────
+   Maps utility classes (bg-background, text-foreground, etc.) to CSS vars
+   so components can use semantic tokens instead of hardcoded dark: values. */
+@theme inline {
+  --color-background:   var(--bg-app);
+  --color-surface:      var(--bg-surface);
+  --color-subtle:       var(--bg-subtle);
+  --color-border:       var(--bg-border);
+  --color-foreground:   var(--text-primary);
+  --color-muted:        var(--text-muted);
+  --color-faint:        var(--text-faint);
+  --color-accent:       var(--accent);
+  --color-accent-hover: var(--accent-hover);
+}
+
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
   /* Light mode */

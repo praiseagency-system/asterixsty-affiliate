@@ -26,7 +26,8 @@
     "brandingSettings":   "Branding Settings",
     "googleIntegration":  "Google Integration",
     "teamManagement":     "Team Management",
-    "settings":           "Settings"
+    "settings":           "Settings",
+    "workspaceSettings":  "Workspace Settings"
   },
   "settings": {
     "title":              "Settings",
@@ -86,13 +87,37 @@
   "common": {
     "save":               "Save",
     "cancel":             "Cancel",
-    "confirm":            "Confirm",
+    "confirm":            "Are you sure?",
     "delete":             "Delete",
     "edit":               "Edit",
-    "loading":            "Loading…",
-    "noWorkspace":        "No workspace selected",
-    "signOut":            "Sign out",
+    "add":                "Add",
+    "loading":            "Loading...",
+    "error":              "Something went wrong",
+    "success":            "Saved successfully",
+    "noData":             "No data available",
+    "search":             "Search...",
+    "filter":             "Filter",
+    "export":             "Export",
+    "import":             "Import",
+    "actions":            "Actions",
+    "status":             "Status",
+    "name":               "Name",
+    "email":              "Email",
+    "role":               "Role",
+    "date":               "Date",
     "yes":                "Yes",
-    "no":                 "No"
+    "no":                 "No",
+    "active":             "Active",
+    "inactive":           "Inactive",
+    "pending":            "Pending",
+    "noWorkspace":        "No workspace selected",
+    "signOut":            "Sign out"
+  },
+  "workspace": {
+    "settings":           "Workspace Settings",
+    "accentColor":        "Accent Color",
+    "accentColorHint":    "Customize the accent color for this workspace",
+    "saveColor":          "Save Color",
+    "colorSaved":         "Accent color updated"
   }
 }

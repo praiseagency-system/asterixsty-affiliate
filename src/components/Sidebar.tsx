@@ -283,7 +283,7 @@ export default function Sidebar() {
   const userImage = session?.user?.image || "";
 
   return (
-    <aside className="w-60 bg-white dark:bg-[#0f1115] border-r border-gray-200 dark:border-[#1e2333] flex flex-col shrink-0 h-full">
+    <aside className="w-60 bg-surface border-r border-border flex flex-col shrink-0 h-full">
 
       {/* ── Brand header ── */}
       <div className="px-4 py-4 border-b border-gray-100 dark:border-[#1e2333]">
@@ -377,18 +377,37 @@ export default function Sidebar() {
         <Link
           href="/settings/appearance"
           className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-            pathname.startsWith("/settings")
+            pathname === "/settings/appearance"
               ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
               : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
           }`}
         >
           <Icon
             d={ICONS.settings}
-            className={pathname.startsWith("/settings")
+            className={pathname === "/settings/appearance"
               ? "text-indigo-500 dark:text-indigo-400"
               : "text-gray-400 dark:text-gray-500"}
           />
           <span>{t("nav.settings")}</span>
+        </Link>
+
+        {/* Workspace Settings */}
+        <Link
+          href="/settings/workspace"
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+            pathname === "/settings/workspace"
+              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+              : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#1d212c] dark:hover:text-gray-200"
+          }`}
+        >
+          <svg
+            className={`w-4 h-4 shrink-0 ${pathname === "/settings/workspace" ? "text-indigo-500 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500"}`}
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>{t("nav.workspaceSettings")}</span>
         </Link>
 
         {/* Permissions still loading — skeleton shimmer */}

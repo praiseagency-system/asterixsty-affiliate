@@ -550,6 +550,7 @@ function MemberRow({ member, canEdit, canEditPerms, onUpdated, onToast }: {
   const [saving,       setSaving]       = useState(false);
   const [confirming,   setConfirming]   = useState(false);
   const [editingPerms, setEditingPerms] = useState(false);
+  const [resending,    setResending]    = useState(false);
 
   const displayName  = member.user?.name  || member.inviteEmail || "Unknown";
   const displayEmail = member.user?.email || member.inviteEmail  || "";
@@ -582,6 +583,21 @@ function MemberRow({ member, canEdit, canEditPerms, onUpdated, onToast }: {
       onToast(d.error || "Failed to remove member", "error");
     }
     setSaving(false); setConfirming(false);
+  }
+
+  async function resendInvite() {
+    setResending(true);
+    try {
+      const res = await fetch("/api/workspace/members/resend", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ memberId: member.id, workspaceId: member.workspaceId }),
+      });
+      const d = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) { onToast(d.error || "Failed to resend invite", "error"); }
+      else { onToast(`Invite resent to ${member.inviteEmail}`, "success"); }
+    } catch { onToast("Network error", "error"); }
+    finally  { setResending(false); }
   }
 
   return (
@@ -628,6 +644,15 @@ function MemberRow({ member, canEdit, canEditPerms, onUpdated, onToast }: {
               <button onClick={() => setEditingPerms(true)}
                 className="text-xs px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-colors">
                 Permissions
+              </button>
+            )}
+            {canEdit && isPending && (
+              <button
+                onClick={resendInvite}
+                disabled={resending}
+                className="text-xs px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+              >
+                {resending ? "…" : "Resend"}
               </button>
             )}
             {canEdit && !isOwner && (

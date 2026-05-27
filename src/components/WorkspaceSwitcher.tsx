@@ -341,7 +341,7 @@ export function WorkspaceSwitcher() {
         {/* Trigger */}
         <button
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 border border-gray-200 bg-white dark:bg-[#151821] dark:border-[#2a2f3d] dark:hover:bg-[#1d212c] transition-colors group"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-subtle border border-border bg-surface transition-colors group"
           aria-haspopup="listbox"
           aria-expanded={open}
         >
@@ -357,7 +357,7 @@ export function WorkspaceSwitcher() {
 
         {/* Dropdown */}
         {open && (
-          <div className="absolute left-3 right-3 top-full z-50 mt-1 bg-white dark:bg-[#151821] border border-gray-200 dark:border-[#2a2f3d] rounded-xl shadow-lg dark:shadow-black/40 py-1 overflow-hidden">
+          <div className="absolute left-3 right-3 top-full z-50 mt-1 bg-surface border border-border rounded-xl shadow-lg py-1 overflow-hidden">
             <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
               Workspaces
             </p>
@@ -366,7 +366,7 @@ export function WorkspaceSwitcher() {
                 <li key={ws.id} role="option" aria-selected={ws.id === current.id}>
                   <button
                     onClick={() => { switchWorkspace(ws.id); setOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 dark:hover:bg-[#1d212c] transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-subtle transition-colors text-left"
                   >
                     <WsAvatar ws={ws} size="sm" />
                     <div className="flex-1 min-w-0">

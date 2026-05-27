@@ -17,13 +17,22 @@ export async function GET() {
     orderBy: { workspace: { id: "asc" } },
   });
 
-  const workspaces = memberships.map((m) => ({
-    id:      m.workspace.id,
-    name:    m.workspace.name,
-    slug:    m.workspace.slug,
-    logoUrl: m.workspace.logoUrl,
-    role:    m.role,
-  }));
+  const workspaces = memberships.map((m) => {
+    let accentColor = "";
+    try {
+      const theme = JSON.parse(m.workspace.theme || "{}") as Record<string, string>;
+      accentColor = theme.accentColor || "";
+    } catch { /* ignore invalid JSON */ }
+
+    return {
+      id:          m.workspace.id,
+      name:        m.workspace.name,
+      slug:        m.workspace.slug,
+      logoUrl:     m.workspace.logoUrl,
+      role:        m.role,
+      accentColor,
+    };
+  });
 
   return NextResponse.json(workspaces);
 }
@@ -63,4 +72,40 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json(workspace, { status: 201 });
+}
+
+// PATCH /api/workspace — update workspace settings (OWNER/ADMIN only)
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json() as { accentColor?: string; workspaceId?: number };
+  const workspaceId = Number(body.workspaceId ?? 0);
+  if (!workspaceId) return NextResponse.json({ error: "workspaceId required" }, { status: 400 });
+
+  // Verify caller is OWNER or ADMIN
+  const member = await prisma.workspaceMember.findFirst({
+    where: { workspaceId, userId: session.user.id, status: "active" },
+  });
+  if (!member || !["OWNER", "ADMIN"].includes(member.role)) {
+    return NextResponse.json({ error: "Forbidden — OWNER or ADMIN required" }, { status: 403 });
+  }
+
+  // Load existing theme, merge changes
+  const ws = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+  if (!ws) return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+
+  let existingTheme: Record<string, string> = {};
+  try { existingTheme = JSON.parse(ws.theme || "{}") as Record<string, string>; } catch { /* ignore */ }
+
+  if (body.accentColor !== undefined) {
+    existingTheme.accentColor = body.accentColor;
+  }
+
+  const updated = await prisma.workspace.update({
+    where: { id: workspaceId },
+    data:  { theme: JSON.stringify(existingTheme) },
+  });
+
+  return NextResponse.json({ ok: true, theme: updated.theme });
 }

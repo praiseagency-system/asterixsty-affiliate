@@ -7,11 +7,25 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface WorkspaceInfo {
-  id:      number;
-  name:    string;
-  slug:    string;
-  logoUrl: string;
-  role:    string; // user's role in this workspace
+  id:          number;
+  name:        string;
+  slug:        string;
+  logoUrl:     string;
+  role:        string; // user's role in this workspace
+  accentColor?: string;
+}
+
+// Apply accent color CSS variable to document root
+function applyAccent(color?: string) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (color) {
+    root.style.setProperty("--accent", color);
+    root.style.setProperty("--accent-hover", color);
+  } else {
+    root.style.removeProperty("--accent");
+    root.style.removeProperty("--accent-hover");
+  }
 }
 
 interface WorkspaceCtx {
@@ -59,7 +73,11 @@ export function WorkspaceProvider({
         ? localStorage.getItem("workspace-id")
         : null;
       const found = stored ? data.find((w) => String(w.id) === stored) : null;
-      setCurrentId(found ? found.id : (data[0]?.id ?? null));
+      const active = found ?? data[0] ?? null;
+      setCurrentId(active ? active.id : null);
+
+      // Apply accent color for the active workspace
+      applyAccent(active?.accentColor);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -70,6 +88,8 @@ export function WorkspaceProvider({
   function switchWorkspace(id: number) {
     setCurrentId(id);
     if (typeof window !== "undefined") localStorage.setItem("workspace-id", String(id));
+    const found = workspaces.find((w) => w.id === id);
+    applyAccent(found?.accentColor);
   }
 
   const current = workspaces.find((w) => w.id === currentId) ?? workspaces[0] ?? null;
