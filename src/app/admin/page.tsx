@@ -223,7 +223,7 @@ function CriteriaPreview({
   const sorted = (rows: CriteriaRow[]) => [...rows].sort((a, b) => b.minValue - a.minValue);
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 shadow-sm p-5">
+    <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/20 dark:to-[#0F1B2D] rounded-2xl border border-indigo-100 shadow-sm p-5">
       <h3 className="text-sm font-bold text-indigo-700 mb-3">🔍 Preview Scoring Logic</h3>
       <p className="text-xs text-gray-500 mb-4">Ini adalah logika scoring yang akan digunakan di Affiliate Scouting</p>
       <div className="grid grid-cols-2 gap-4">

@@ -88,25 +88,27 @@ export default function SearchableSelect({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
         disabled={disabled}
-        className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white pr-8 ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
+        className={`w-full border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-faint bg-subtle focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-accent pr-8 ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
         autoComplete="off"
       />
       {/* Arrow icon */}
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs">
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none text-xs">
         {loading ? "⏳" : "▾"}
       </span>
 
       {open && options.length > 0 && (
         <ul
           ref={listRef}
-          className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto py-1"
+          className="absolute z-50 left-0 right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg max-h-52 overflow-y-auto py-1"
         >
           {options.map((opt, idx) => (
             <li
               key={opt}
               onMouseDown={() => select(opt)}
               className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
-                idx === activeIdx ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"
+                idx === activeIdx
+                  ? "bg-indigo-500/15 text-foreground"
+                  : "text-foreground hover:bg-subtle"
               }`}
             >
               {opt}
