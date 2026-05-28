@@ -4,7 +4,7 @@
  * Required env vars:
  *   RESEND_API_KEY           — from resend.com dashboard
  *   RESEND_FROM_EMAIL        — verified sender (e.g. "Praise Agency <noreply@yourdomain.com>")
- *   NEXT_PUBLIC_APP_URL      — e.g. "https://your-app.up.railway.app"
+ *   NEXT_PUBLIC_APP_URL      — e.g. "https://app.praiseagency.id"
  */
 
 import { Resend } from "resend";

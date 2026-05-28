@@ -1,7 +1,12 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-// Routes that never require authentication
+// ── Custom domain ─────────────────────────────────────────────────────────────
+const CUSTOM_DOMAIN  = "app.praiseagency.id";
+// Any *.railway.app hostname is considered legacy and gets a permanent redirect
+const LEGACY_PATTERN = /\.railway\.app$/;
+
+// ── Routes that never require authentication ──────────────────────────────────
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth",
@@ -17,6 +22,17 @@ function isPublic(pathname: string): boolean {
 }
 
 export default auth((req) => {
+  const host = req.headers.get("host") ?? "";
+
+  // ── Redirect legacy Railway domain → custom domain (301 permanent) ────────
+  if (LEGACY_PATTERN.test(host)) {
+    const dest = req.nextUrl.clone();
+    dest.protocol = "https:";
+    dest.host     = CUSTOM_DOMAIN;
+    dest.port     = "";
+    return NextResponse.redirect(dest, 301);
+  }
+
   const { pathname } = req.nextUrl;
 
   // Always allow public paths
