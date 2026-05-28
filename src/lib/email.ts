@@ -18,8 +18,6 @@ const BLOCKED_SENDER_DOMAINS = ["gmail.com", "yahoo.com", "hotmail.com", "outloo
 const DEFAULT_FROM = "Praise Agency <invite@praiseagency.id>";
 
 // ─── Lazy Resend instantiation ────────────────────────────────────────────────
-// Do NOT instantiate at module level: RESEND_API_KEY is absent at build time
-// and new Resend("") throws, breaking the Next.js "collect page data" step.
 function getResend(): Resend {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY is not set");
@@ -27,13 +25,9 @@ function getResend(): Resend {
 }
 
 // ─── Resolve FROM address ─────────────────────────────────────────────────────
-// Priority: RESEND_FROM → RESEND_FROM_EMAIL → DEFAULT_FROM
-// Accepts both "email@domain.com" and "Name <email@domain.com>" formats.
 function resolveFrom(): string {
   const raw = process.env.RESEND_FROM ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM;
-  // If already "Name <email>" format, return as-is
   if (raw.includes("<")) return raw;
-  // Plain email address → wrap with display name
   return `Praise Agency <${raw.trim()}>`;
 }
 
@@ -42,37 +36,27 @@ function validateSender(from: string): string | null {
   const match  = from.match(/<([^>]+)>/) ?? [null, from];
   const email  = (match[1] ?? from).toLowerCase().trim();
   const domain = email.split("@")[1] ?? "";
-
   if (!domain) return "Invalid sender address configured in RESEND_FROM.";
-
   if (BLOCKED_SENDER_DOMAINS.includes(domain)) {
-    return `Sender domain "${domain}" is not allowed. ` +
-      `Use a verified custom domain (e.g. invite@praiseagency.id).`;
+    return `Sender domain "${domain}" is not allowed. Use a verified custom domain (e.g. invite@praiseagency.id).`;
   }
-  return null; // valid
+  return null;
 }
 
 // ─── Classify Resend errors → user-friendly messages ─────────────────────────
 function classifyResendError(err: unknown): string {
-  const raw = (err instanceof Error ? err.message : String(err));
+  const raw = err instanceof Error ? err.message : String(err);
   const msg = raw.toLowerCase();
-
-  if (msg.includes("domain") && (msg.includes("verif") || msg.includes("not found"))) {
+  if (msg.includes("domain") && (msg.includes("verif") || msg.includes("not found")))
     return "Email domain is still verifying. Please wait a few minutes and try again.";
-  }
-  if (msg.includes("from address") || msg.includes("invalid_from") || msg.includes("sender")) {
+  if (msg.includes("from address") || msg.includes("invalid_from") || msg.includes("sender"))
     return "Email domain is still verifying. Please wait a few minutes and try again.";
-  }
-  if (msg.includes("api_key") || msg.includes("api key") || msg.includes("unauthorized")) {
+  if (msg.includes("api_key") || msg.includes("api key") || msg.includes("unauthorized"))
     return "Email service API key is invalid or missing. Contact your administrator.";
-  }
-  if (msg.includes("rate_limit") || msg.includes("rate limit") || msg.includes("too many")) {
+  if (msg.includes("rate_limit") || msg.includes("rate limit") || msg.includes("too many"))
     return "Too many emails sent. Please wait a moment and try again.";
-  }
-  if (msg.includes("quota") || msg.includes("exceeded")) {
+  if (msg.includes("quota") || msg.includes("exceeded"))
     return "Email sending quota exceeded. Contact your administrator.";
-  }
-  // Strip raw JSON blobs, cap length
   const clean = raw.replace(/\{[\s\S]{0,500}\}/, "").trim();
   return clean.length > 150 ? clean.slice(0, 150) + "…" : (clean || "Email delivery failed.");
 }
@@ -82,10 +66,10 @@ const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").rep
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface InviteEmailParams {
-  to:            string;   // recipient email
-  invitedByName: string;   // person who sent the invite
+  to:            string;
+  invitedByName: string;
   workspaceName: string;
-  workspaceLogo?: string;  // absolute URL
+  workspaceLogo?: string;
   role:          string;
   inviteToken:   string;
   lang?:         "en" | "id";
@@ -95,28 +79,342 @@ export interface InviteEmailParams {
 
 const COPY = {
   en: {
-    subject:  (ws: string) => `You've been invited to join ${ws}`,
-    headline: (name: string) => `${name} invited you`,
-    body:     (ws: string, role: string) =>
-      `You've been invited to join <strong>${ws}</strong> as <strong>${role}</strong>.`,
-    cta:      "Accept Invitation",
-    expiry:   "This invitation expires in 7 days.",
-    ignore:   "If you didn't expect this invitation, you can safely ignore this email.",
-    footer:   "Powered by Praise Agency Affiliate Platform",
+    subject:     (ws: string) => `You've been invited to ${ws}`,
+    preheader:   (name: string, ws: string) => `${name} has invited you to join ${ws} on Praise Agency.`,
+    eyebrow:     "workspace invitation",
+    headline:    (name: string) => `${name} invited you to join`,
+    subheadline: (ws: string) => ws,
+    body:        (role: string) =>
+      `You&rsquo;ve been granted <strong>${role}</strong> access. Click below to accept your invitation and get started.`,
+    roleLabel:   "Your role",
+    cta:         "Access Workspace",
+    expiry:      "This invitation expires in 7 days.",
+    ignore:      "If you didn&rsquo;t expect this invitation, no action is needed &mdash; you can safely ignore this email.",
+    footer:      "Powered by Praise Agency",
+    footerSub:   "Affiliate Management Platform",
   },
   id: {
-    subject:  (ws: string) => `Kamu diundang bergabung ke ${ws}`,
-    headline: (name: string) => `${name} mengundangmu`,
-    body:     (ws: string, role: string) =>
-      `Kamu diundang bergabung ke <strong>${ws}</strong> sebagai <strong>${role}</strong>.`,
-    cta:      "Terima Undangan",
-    expiry:   "Undangan ini kadaluarsa dalam 7 hari.",
-    ignore:   "Jika kamu tidak mengharapkan undangan ini, abaikan email ini.",
-    footer:   "Didukung oleh Praise Agency Affiliate Platform",
+    subject:     (ws: string) => `Kamu diundang bergabung ke ${ws}`,
+    preheader:   (name: string, ws: string) => `${name} mengundangmu untuk bergabung ke ${ws} di Praise Agency.`,
+    eyebrow:     "undangan workspace",
+    headline:    (name: string) => `${name} mengundangmu bergabung ke`,
+    subheadline: (ws: string) => ws,
+    body:        (role: string) =>
+      `Kamu mendapatkan akses sebagai <strong>${role}</strong>. Klik tombol di bawah untuk menerima undangan.`,
+    roleLabel:   "Peranmu",
+    cta:         "Akses Workspace",
+    expiry:      "Undangan ini kadaluarsa dalam 7 hari.",
+    ignore:      "Jika kamu tidak mengharapkan undangan ini, tidak perlu melakukan apa pun &mdash; abaikan saja email ini.",
+    footer:      "Powered by Praise Agency",
+    footerSub:   "Platform Manajemen Affiliate",
   },
 };
 
-// ─── sendInviteEmail ─────────────────────────────────────────────────────────
+// ─── Build HTML template ─────────────────────────────────────────────────────
+
+function buildEmailHtml(params: InviteEmailParams & { acceptUrl: string }): string {
+  const lang      = params.lang ?? "en";
+  const c         = COPY[lang];
+  const initials  = params.workspaceName.slice(0, 2).toUpperCase();
+
+  const avatarBlock = params.workspaceLogo
+    ? `<img src="${params.workspaceLogo}" alt="${params.workspaceName}"
+           width="48" height="48"
+           style="width:48px;height:48px;border-radius:12px;object-fit:cover;
+                  display:block;border:1px solid rgba(255,255,255,0.10);" />`
+    : `<div style="width:48px;height:48px;border-radius:12px;
+                   background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);
+                   display:inline-flex;align-items:center;justify-content:center;
+                   font-size:18px;font-weight:700;color:#ffffff;
+                   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                   text-align:center;line-height:48px;">${initials}</div>`;
+
+  return `<!DOCTYPE html>
+<html lang="${lang}" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>${c.subject(params.workspaceName)}</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings>
+    <o:PixelsPerInch>96</o:PixelsPerInch>
+  </o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background-color: #08080F; }
+    @media only screen and (max-width: 600px) {
+      .email-wrapper { padding: 16px 0 !important; }
+      .email-card    { border-radius: 0 !important; }
+      .email-pad     { padding: 28px 24px !important; }
+      .header-pad    { padding: 32px 24px 28px !important; }
+      .cta-btn       { padding: 14px 24px !important; font-size: 14px !important; }
+      .footer-pad    { padding: 20px 24px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#08080F;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+
+  <!-- Preheader (hidden) -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;
+              color:#08080F;font-size:1px;line-height:1px;">
+    ${c.preheader(params.invitedByName, params.workspaceName)}&nbsp;
+    &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+    &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+  </div>
+
+  <!-- Outer wrapper -->
+  <table class="email-wrapper" width="100%" cellpadding="0" cellspacing="0"
+    style="background-color:#08080F;padding:48px 24px;" role="presentation">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- Card -->
+        <table class="email-card" width="100%" cellpadding="0" cellspacing="0"
+          style="max-width:540px;background-color:#0F0F1A;border-radius:20px;
+                 border:1px solid rgba(255,255,255,0.07);
+                 box-shadow:0 0 0 1px rgba(255,255,255,0.04),
+                             0 32px 64px rgba(0,0,0,0.6);"
+          role="presentation">
+
+          <!-- ── HEADER ───────────────────────────────────────────────────── -->
+          <tr>
+            <td class="header-pad"
+              style="padding:40px 40px 32px;
+                     background:linear-gradient(160deg,#1a0a3d 0%,#120d2e 40%,#0d0d1f 100%);
+                     border-radius:20px 20px 0 0;
+                     border-bottom:1px solid rgba(255,255,255,0.06);
+                     position:relative;">
+
+              <!-- Glow orb (supported in most clients) -->
+              <div style="position:absolute;top:-40px;right:-20px;width:220px;height:220px;
+                          background:radial-gradient(circle,rgba(99,102,241,0.18) 0%,transparent 70%);
+                          pointer-events:none;"></div>
+
+              <!-- Praise Agency wordmark -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                style="margin-bottom:28px;">
+                <tr>
+                  <td>
+                    <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                  'Inter',Helvetica,Arial,sans-serif;
+                                  font-size:13px;font-weight:700;letter-spacing:0.08em;
+                                  text-transform:uppercase;color:rgba(255,255,255,0.35);">
+                      Praise&nbsp;Agency
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Workspace info row -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td width="56" valign="top" style="padding-right:16px;">
+                    ${avatarBlock}
+                  </td>
+                  <td valign="middle">
+                    <!-- Eyebrow -->
+                    <p style="margin:0 0 4px;
+                               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                 'Inter',Helvetica,Arial,sans-serif;
+                               font-size:11px;font-weight:600;letter-spacing:0.12em;
+                               text-transform:uppercase;color:rgba(255,255,255,0.35);">
+                      ${c.eyebrow}
+                    </p>
+                    <!-- Headline -->
+                    <p style="margin:0 0 2px;
+                               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                 'Inter',Helvetica,Arial,sans-serif;
+                               font-size:14px;font-weight:500;color:rgba(255,255,255,0.60);
+                               line-height:1.4;">
+                      ${c.headline(params.invitedByName)}
+                    </p>
+                    <!-- Workspace name -->
+                    <p style="margin:0;
+                               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                 'Inter',Helvetica,Arial,sans-serif;
+                               font-size:22px;font-weight:700;color:#FFFFFF;
+                               line-height:1.25;letter-spacing:-0.02em;">
+                      ${c.subheadline(params.workspaceName)}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- ── BODY ────────────────────────────────────────────────────── -->
+          <tr>
+            <td class="email-pad" style="padding:36px 40px 32px;">
+
+              <!-- Body copy -->
+              <p style="margin:0 0 28px;
+                         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                           'Inter',Helvetica,Arial,sans-serif;
+                         font-size:15px;font-weight:400;line-height:1.75;
+                         color:rgba(255,255,255,0.58);">
+                ${c.body(params.role)}
+              </p>
+
+              <!-- Role pill -->
+              <table cellpadding="0" cellspacing="0" role="presentation"
+                style="margin-bottom:32px;">
+                <tr>
+                  <td style="background:rgba(99,102,241,0.14);
+                              border:1px solid rgba(99,102,241,0.30);
+                              border-radius:100px;padding:6px 14px;">
+                    <table cellpadding="0" cellspacing="0" role="presentation">
+                      <tr>
+                        <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                     'Inter',Helvetica,Arial,sans-serif;
+                                   font-size:10px;font-weight:600;letter-spacing:0.10em;
+                                   text-transform:uppercase;
+                                   color:rgba(255,255,255,0.45);padding-right:8px;">
+                          ${c.roleLabel}
+                        </td>
+                        <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                     'Inter',Helvetica,Arial,sans-serif;
+                                   font-size:12px;font-weight:700;
+                                   color:#a5b4fc;">
+                          ${params.role}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                style="margin-bottom:28px;">
+                <tr>
+                  <td style="height:1px;background:rgba(255,255,255,0.06);
+                              font-size:0;line-height:0;">&nbsp;</td>
+                </tr>
+              </table>
+
+              <!-- CTA button -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td align="center">
+                    <a href="${params.acceptUrl}" class="cta-btn"
+                      style="display:inline-block;
+                             background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);
+                             color:#ffffff;text-decoration:none;
+                             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                               'Inter',Helvetica,Arial,sans-serif;
+                             font-size:15px;font-weight:700;letter-spacing:0.01em;
+                             padding:15px 40px;border-radius:12px;
+                             box-shadow:0 4px 24px rgba(99,102,241,0.45);
+                             mso-padding-alt:15px 40px;">
+                      ${c.cta} &nbsp;→
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Link fallback -->
+              <p style="margin:20px 0 0;
+                         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                           'Inter',Helvetica,Arial,sans-serif;
+                         font-size:12px;color:rgba(255,255,255,0.25);
+                         text-align:center;line-height:1.5;">
+                Or paste this link in your browser:<br/>
+                <a href="${params.acceptUrl}"
+                  style="color:#6366f1;word-break:break-all;text-decoration:none;">
+                  ${params.acceptUrl}
+                </a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ── FOOTER ──────────────────────────────────────────────────── -->
+          <tr>
+            <td class="footer-pad"
+              style="padding:24px 40px;
+                     border-top:1px solid rgba(255,255,255,0.05);
+                     border-radius:0 0 20px 20px;">
+
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td>
+                    <!-- Expiry notice -->
+                    <p style="margin:0 0 6px;
+                               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                 'Inter',Helvetica,Arial,sans-serif;
+                               font-size:12px;color:rgba(255,255,255,0.28);
+                               line-height:1.6;">
+                      ${c.expiry}
+                    </p>
+                    <!-- Ignore notice -->
+                    <p style="margin:0 0 20px;
+                               font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                 'Inter',Helvetica,Arial,sans-serif;
+                               font-size:11px;color:rgba(255,255,255,0.18);
+                               line-height:1.6;">
+                      ${c.ignore}
+                    </p>
+                    <!-- Divider -->
+                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                      style="margin-bottom:16px;">
+                      <tr>
+                        <td style="height:1px;background:rgba(255,255,255,0.05);
+                                    font-size:0;line-height:0;">&nbsp;</td>
+                      </tr>
+                    </table>
+                    <!-- Brand lockup -->
+                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                      <tr>
+                        <td>
+                          <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                         'Inter',Helvetica,Arial,sans-serif;
+                                       font-size:12px;font-weight:700;letter-spacing:0.06em;
+                                       text-transform:uppercase;
+                                       color:rgba(255,255,255,0.20);">
+                            ${c.footer}
+                          </span>
+                          <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                         'Inter',Helvetica,Arial,sans-serif;
+                                       font-size:11px;color:rgba(255,255,255,0.12);
+                                       padding-left:8px;">
+                            &mdash; ${c.footerSub}
+                          </span>
+                        </td>
+                        <td align="right">
+                          <a href="${APP_URL}"
+                            style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
+                                     'Inter',Helvetica,Arial,sans-serif;
+                                   font-size:11px;color:rgba(99,102,241,0.50);
+                                   text-decoration:none;">
+                            app.praiseagency.id
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- /Outer wrapper -->
+
+</body>
+</html>`;
+}
+
+// ─── sendInviteEmail ──────────────────────────────────────────────────────────
 
 export async function sendInviteEmail(
   params: InviteEmailParams,
@@ -126,149 +424,28 @@ export async function sendInviteEmail(
   const acceptUrl = `${APP_URL}/invite?token=${params.inviteToken}`;
   const FROM      = resolveFrom();
 
-  // ── Pre-flight: dev mode without API key ────────────────────────────────
+  // ── Dev mode: no API key ────────────────────────────────────────────────
   if (!process.env.RESEND_API_KEY) {
     console.log("[email] RESEND_API_KEY not set — would send invitation to:", params.to);
     console.log("[email] Accept URL:", acceptUrl);
     return { ok: true };
   }
 
-  // ── Pre-flight: validate sender domain ──────────────────────────────────
+  // ── Validate sender ─────────────────────────────────────────────────────
   const senderErr = validateSender(FROM);
   if (senderErr) {
     console.error("[email] Sender validation failed:", senderErr);
     return { ok: false, error: senderErr };
   }
 
-  // ── Build email HTML ────────────────────────────────────────────────────
-  const logoBlock = params.workspaceLogo
-    ? `<img src="${params.workspaceLogo}" alt="${params.workspaceName}"
-         style="width:48px;height:48px;border-radius:12px;object-fit:cover;display:block;" />`
-    : `<div style="width:48px;height:48px;border-radius:12px;
-         background:linear-gradient(135deg,#6366f1,#8b5cf6);
-         display:flex;align-items:center;justify-content:center;">
-         <span style="color:#fff;font-size:18px;font-weight:700;font-family:sans-serif;">
-           ${params.workspaceName.slice(0, 2).toUpperCase()}
-         </span>
-       </div>`;
-
-  const html = `<!DOCTYPE html>
-<html lang="${lang}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${c.subject(params.workspaceName)}</title>
-</head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
-    style="background:#f4f5f7;padding:40px 16px;">
-    <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
-          style="max-width:520px;background:#fff;border-radius:20px;overflow:hidden;
-                 box-shadow:0 4px 24px rgba(0,0,0,0.07);">
-
-          <!-- Header -->
-          <tr>
-            <td style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);
-                       padding:32px 40px 24px;">
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td>${logoBlock}</td>
-                  <td style="padding-left:16px;vertical-align:middle;">
-                    <p style="margin:0;color:rgba(255,255,255,0.7);font-size:11px;
-                               font-weight:600;letter-spacing:0.1em;text-transform:uppercase;">
-                      ${params.workspaceName}
-                    </p>
-                    <p style="margin:4px 0 0;color:#fff;font-size:22px;font-weight:700;
-                               line-height:1.2;">
-                      ${c.headline(params.invitedByName)}
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:32px 40px 24px;">
-              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#374151;">
-                ${c.body(params.workspaceName, params.role)}
-              </p>
-
-              <!-- Role badge -->
-              <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 28px;">
-                <tr>
-                  <td style="background:#ede9fe;border-radius:100px;padding:6px 16px;">
-                    <span style="color:#6d28d9;font-size:13px;font-weight:700;">
-                      ${params.role}
-                    </span>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- CTA -->
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td align="center">
-                    <a href="${acceptUrl}"
-                      style="display:inline-block;
-                             background:linear-gradient(135deg,#4f46e5,#7c3aed);
-                             color:#fff;text-decoration:none;font-size:15px;font-weight:700;
-                             padding:14px 40px;border-radius:14px;letter-spacing:0.02em;">
-                      ${c.cta}
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
-                Or copy this link:
-                <a href="${acceptUrl}"
-                  style="color:#6366f1;word-break:break-all;">${acceptUrl}</a>
-              </p>
-            </td>
-          </tr>
-
-          <!-- Divider -->
-          <tr>
-            <td style="padding:0 40px;">
-              <div style="height:1px;background:#f3f4f6;"></div>
-            </td>
-          </tr>
-
-          <!-- Expiry + ignore notice -->
-          <tr>
-            <td style="padding:20px 40px 28px;">
-              <p style="margin:0 0 8px;font-size:12px;color:#9ca3af;">${c.expiry}</p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">${c.ignore}</p>
-            </td>
-          </tr>
-
-          <!-- Branding footer -->
-          <tr>
-            <td style="background:#fafafa;border-top:1px solid #f3f4f6;
-                       padding:16px 40px;text-align:center;">
-              <p style="margin:0;font-size:11px;color:#d1d5db;">${c.footer}</p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-
-  // ── Send via Resend ─────────────────────────────────────────────────────
+  // ── Send ────────────────────────────────────────────────────────────────
   try {
     const resend = getResend();
     const result = await resend.emails.send({
       from:    FROM,
       to:      params.to,
       subject: c.subject(params.workspaceName),
-      html,
+      html:    buildEmailHtml({ ...params, acceptUrl }),
     });
 
     if (result.error) {
