@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { formatRupiah, formatNumber, formatCtr } from "@/lib/format";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface MonitorRow {
   no: number;
@@ -140,7 +142,7 @@ function downloadCSV(items: MonitorRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function MonitoringMingguan() {
+function MonitoringMingguan() {
   const [items, setItems] = useState<MonitorRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [prevSummary, setPrevSummary] = useState<Summary | null>(null);
@@ -347,5 +349,13 @@ export default function MonitoringMingguan() {
         <div className="px-4 py-2 border-t border-gray-100 text-xs text-gray-400">{total} creator</div>
       </div>
     </div>
+  );
+}
+
+export default function MonitoringMingguanGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_MONITORING}>
+      <MonitoringMingguan />
+    </PermissionGate>
   );
 }

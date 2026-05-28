@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -116,7 +118,7 @@ function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: b
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function AutomationPage() {
+function AutomationPage() {
   const [stats, setStats] = useState<AutomationStats | null>(null);
   const [config, setConfig] = useState<AutomationConfig>({
     automationEnabled: true,
@@ -847,5 +849,13 @@ export default function AutomationPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AutomationPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.MANAGE_WHATSAPP}>
+      <AutomationPage />
+    </PermissionGate>
   );
 }

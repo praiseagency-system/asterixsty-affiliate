@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { requirePermission, permError } from "@/lib/permission-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,9 @@ export async function GET(_req: Request, { params }: Params) {
 
 // PATCH /api/campaigns/[id]
 export async function PATCH(req: Request, { params }: Params) {
+  const check = await requirePermission(req, PERMISSIONS.EDIT_CAMPAIGN);
+  if ("error" in check) return permError(check);
+
   const prisma = getPrisma();
   const { id } = await params;
   try {
@@ -103,7 +108,10 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 // DELETE /api/campaigns/[id] — soft delete
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
+  const check = await requirePermission(req, PERMISSIONS.DELETE_CAMPAIGN);
+  if ("error" in check) return permError(check);
+
   const prisma = getPrisma();
   const { id } = await params;
   await prisma.campaign.update({

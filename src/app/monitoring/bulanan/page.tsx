@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { formatRupiah, formatNumber, formatCtr } from "@/lib/format";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface MonitorRow {
   no: number;
@@ -163,7 +165,7 @@ function downloadCSV(items: MonitorRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function MonitoringBulanan() {
+function MonitoringBulanan() {
   const [items, setItems] = useState<MonitorRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [prevSummary, setPrevSummary] = useState<Summary | null>(null);
@@ -463,5 +465,13 @@ export default function MonitoringBulanan() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MonitoringBulananGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_MONITORING}>
+      <MonitoringBulanan />
+    </PermissionGate>
   );
 }

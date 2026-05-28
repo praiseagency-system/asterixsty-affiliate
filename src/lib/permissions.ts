@@ -283,3 +283,28 @@ export const ROLE_DESCRIPTIONS: Record<RoleType, string> = {
   VIEWER:     "Read-only access to core data",
   CLIENT:     "Brand dashboard and campaign progress visibility only",
 };
+
+/**
+ * Simple boolean check — use inside API routes or server components.
+ * For client-side, prefer usePermission().can() from PermissionContext.
+ */
+export function hasPermission(userPermissions: string[], key: string): boolean {
+  return userPermissions.includes(key);
+}
+
+/**
+ * Returns a plain Record<string, boolean> for all known permissions,
+ * merging role defaults with per-user overrides (granted/denied pairs).
+ * Useful when you need a serialisable map (e.g. to pass to a client component).
+ */
+export function getEffectivePermissions(
+  role:      string,
+  overrides: { permission: string; granted: boolean }[] = [],
+): Record<string, boolean> {
+  const set = resolvePermissions(role, overrides);
+  const result: Record<string, boolean> = {};
+  for (const perm of ALL_PERMISSIONS) {
+    result[perm] = set.has(perm);
+  }
+  return result;
+}

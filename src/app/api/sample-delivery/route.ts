@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { sendSampleDeliveryWA } from "@/lib/send-sample-delivery-wa";
 import { generatePersonalFormLink } from "@/lib/google-auth";
 import { resolveWorkspaceId } from "@/lib/workspace-guard";
+import { requirePermission, permError } from "@/lib/permission-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const check = await requirePermission(req, PERMISSIONS.CREATE_SAMPLE);
+  if ("error" in check) return permError(check);
+
   const wsId = resolveWorkspaceId(req) ?? 1;
   const body = await req.json();
   const target = Number(body.totalVideoTarget) || 0;

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface TierConfig {
@@ -283,7 +285,7 @@ interface AutomationConfig {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function AdminPage() {
+function AdminPage() {
   const [tierConfig,    setTierConfig]    = useState<TierConfig[]>([]);
   const [gmvCriteria,   setGmvCriteria]   = useState<CriteriaRow[]>([]);
   const [qtyCriteria,   setQtyCriteria]   = useState<CriteriaRow[]>([]);
@@ -664,5 +666,13 @@ export default function AdminPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function AdminPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.EDIT_WORKSPACE}>
+      <AdminPage />
+    </PermissionGate>
   );
 }

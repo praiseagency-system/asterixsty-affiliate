@@ -36,6 +36,18 @@ interface WorkspaceCtx {
   refresh:          () => Promise<void>;
   /** Fetch wrapper that automatically injects X-Workspace-ID header */
   wsFetch:          (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+  /**
+   * Convenience shortcuts — delegates to PermissionContext.
+   * Populated after WorkspaceProvider mounts; starts as always-false until
+   * PermissionContext provides the real values via setCanHelpers().
+   */
+  can:    (...perms: string[]) => boolean;
+  canAny: (...perms: string[]) => boolean;
+  /** Internal — called by PermissionProvider to wire up the helpers */
+  setCanHelpers: (
+    can:    (...perms: string[]) => boolean,
+    canAny: (...perms: string[]) => boolean,
+  ) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceCtx>({
@@ -44,6 +56,9 @@ const WorkspaceContext = createContext<WorkspaceCtx>({
   loading: true,
   refresh: async () => {},
   wsFetch: (input, init) => fetch(input, init),
+  can:    () => false,
+  canAny: () => false,
+  setCanHelpers: () => {},
 });
 
 export function useWorkspace() { return useContext(WorkspaceContext); }
@@ -59,6 +74,18 @@ export function WorkspaceProvider({
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
   const [currentId,  setCurrentId]  = useState<number | null>(null);
   const [loading,    setLoading]    = useState(true);
+
+  // ── Wired up by PermissionProvider once it mounts ──────────────────────────
+  const [can,    setCan]    = useState<(...perms: string[]) => boolean>(() => () => false);
+  const [canAny, setCanAny] = useState<(...perms: string[]) => boolean>(() => () => false);
+
+  function setCanHelpers(
+    canFn:    (...perms: string[]) => boolean,
+    canAnyFn: (...perms: string[]) => boolean,
+  ) {
+    setCan(() => canFn);
+    setCanAny(() => canAnyFn);
+  }
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return; }
@@ -146,7 +173,7 @@ export function WorkspaceProvider({
   }
 
   return (
-    <WorkspaceContext.Provider value={{ workspaces, current, switchWorkspace, loading, refresh: load, wsFetch }}>
+    <WorkspaceContext.Provider value={{ workspaces, current, switchWorkspace, loading, refresh: load, wsFetch, can, canAny, setCanHelpers }}>
       {children}
     </WorkspaceContext.Provider>
   );

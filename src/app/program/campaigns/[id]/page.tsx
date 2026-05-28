@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CAMPAIGN_OBJECTIVES, OBJECTIVE_META, VISUAL_TAKE } from "@/lib/constants";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const RULE_TYPES = ["Most Videos","Highest Views","Highest GMV","Best Conversion","Most Consistent","Most Active Creator","Custom Rule"] as const;
@@ -1416,7 +1418,7 @@ function SettingsTab({c,onUpdated,specialists,categories}:{c:Campaign;onUpdated:
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function CampaignDetailPage(){
+function CampaignDetailPage(){
   const params=useParams();
   const id=params?.id as string;
   const [campaign,setCampaign]         =useState<Campaign|null>(null);
@@ -1557,5 +1559,13 @@ export default function CampaignDetailPage(){
       {tab==="automation"   &&<AutomationTab  c={campaign} onRefresh={fetchCampaign}/>}
       {tab==="settings"     &&<SettingsTab    c={campaign} onUpdated={fetchCampaign} specialists={specialists} categories={categories}/>}
     </div>
+  );
+}
+
+export default function CampaignDetailPageGate(){
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <CampaignDetailPage />
+    </PermissionGate>
   );
 }

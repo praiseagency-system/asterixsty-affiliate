@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface Product    { id: number; no: number; nama: string; hpp: number }
 interface Specialist { id: number; no: number; nama: string }
@@ -86,7 +88,7 @@ function DeleteConfirm({
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function MasterPage() {
+function MasterPage() {
   const [data, setData]           = useState<MasterData>({ products: [], specialists: [], categories: [] });
   const [tab,  setTab]            = useState<"products" | "specialists" | "categories" | "templates">("products");
   const [templates, setTemplates]     = useState<ReminderTemplate[]>([]);
@@ -964,5 +966,13 @@ export default function MasterPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MasterPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.EDIT_WORKSPACE}>
+      <MasterPage />
+    </PermissionGate>
   );
 }

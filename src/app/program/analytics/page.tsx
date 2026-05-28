@@ -1,6 +1,9 @@
 "use client";
 
-export default function ProgramAnalyticsPage() {
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
+
+function ProgramAnalyticsPage() {
   const metrics = [
     { icon: "🎯", label: "Campaign Performance",  desc: "ROI, conversion rate, dan efektivitas tiap campaign" },
     { icon: "👥", label: "Affiliator Insights",   desc: "Performa individu dan segmentasi affiliator" },
@@ -65,5 +68,13 @@ export default function ProgramAnalyticsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProgramAnalyticsPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <ProgramAnalyticsPage />
+    </PermissionGate>
   );
 }

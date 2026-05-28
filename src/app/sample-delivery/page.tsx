@@ -4,6 +4,8 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import SearchableSelect from "@/components/SearchableSelect";
 import ConfirmModal from "@/components/ConfirmModal";
 import { useBranding } from "@/contexts/BrandingContext";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface DeadlineConfig {
@@ -1306,7 +1308,7 @@ function AddDeliveryForm({ onSuccess, onCancel, cfg, prefill }: {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function SampleDeliveryPage() {
+function SampleDeliveryPage() {
   const { brand }                 = useBranding();
   const [items, setItems]         = useState<Delivery[]>([]);
   const [total, setTotal]         = useState(0);
@@ -1717,5 +1719,13 @@ export default function SampleDeliveryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SampleDeliveryPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_SAMPLE}>
+      <SampleDeliveryPage />
+    </PermissionGate>
   );
 }

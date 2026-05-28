@@ -35,7 +35,7 @@ export function usePermission() { return useContext(PermissionContext); }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function PermissionProvider({ children }: { children: ReactNode }) {
-  const { current } = useWorkspace();
+  const { current, setCanHelpers } = useWorkspace();
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [role,        setRole]        = useState("");
   const [memberId,    setMemberId]    = useState<number | null>(null);
@@ -83,6 +83,13 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     if (role === "OWNER") return true;
     return perms.some((p) => permissions.has(p));
   }
+
+  // Keep WorkspaceContext helpers in sync so pages that pull from
+  // useWorkspace() can also call can() / canAny() directly.
+  useEffect(() => {
+    setCanHelpers(can, canAny);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions, role]);
 
   return (
     <PermissionContext.Provider

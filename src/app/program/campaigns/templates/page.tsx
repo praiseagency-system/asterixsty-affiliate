@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { OBJECTIVE_META } from "@/lib/constants";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Campaign {
@@ -119,7 +121,7 @@ function TemplateCard({ t, onDuplicate }: { t: Campaign; onDuplicate: (id: numbe
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function TemplatesPage() {
+function TemplatesPage() {
   const [templates, setTemplates] = useState<Campaign[]>([]);
   const [loading, setLoading]     = useState(true);
   const [duping, setDuping]       = useState<number|null>(null);
@@ -258,5 +260,13 @@ export default function TemplatesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TemplatesPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <TemplatesPage />
+    </PermissionGate>
   );
 }

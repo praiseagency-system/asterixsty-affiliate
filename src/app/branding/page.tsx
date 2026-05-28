@@ -3,6 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import { useBranding } from "@/contexts/BrandingContext";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ── Client-side image compress + crop to target aspect ────────────────────────
 async function compressImage(
@@ -79,7 +81,7 @@ function UploadProgress({ pct, label }: { pct: number; label: string }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function BrandingPage() {
+function BrandingPage() {
   const { brand, refreshBranding } = useBranding();
 
   // Local form state — mirrors context but editable
@@ -484,5 +486,13 @@ export default function BrandingPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function BrandingPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.BRANDING_SETTINGS}>
+      <BrandingPage />
+    </PermissionGate>
   );
 }

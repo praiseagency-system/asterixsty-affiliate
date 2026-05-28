@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface RewardDist {
   id: number; campaignId: number; tiktokUsername: string; namaAffiliate: string;
@@ -94,7 +96,7 @@ function AddRewardModal({ campaigns, onClose, onCreated }: { campaigns: Campaign
   );
 }
 
-export default function RewardsPage() {
+function RewardsPage() {
   const [rewards, setRewards]     = useState<RewardDist[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -212,5 +214,13 @@ export default function RewardsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function RewardsPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <RewardsPage />
+    </PermissionGate>
   );
 }

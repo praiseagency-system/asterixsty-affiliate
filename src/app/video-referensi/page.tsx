@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface VideoItem {
@@ -649,7 +651,7 @@ function AnalyticsCard({ icon, label, value }: { icon: string; label: string; va
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function VideoReferensiPage() {
+function VideoReferensiPage() {
   const [items, setItems]         = useState<VideoItem[]>([]);
   const [total, setTotal]         = useState(0);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -862,5 +864,13 @@ export default function VideoReferensiPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function VideoReferensiPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CONTENT}>
+      <VideoReferensiPage />
+    </PermissionGate>
   );
 }

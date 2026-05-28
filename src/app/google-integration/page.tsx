@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface GoogleStatus {
@@ -1007,7 +1009,7 @@ function GoogleIntegrationInner() {
 }
 
 // ── Page wrapper with Suspense (required for useSearchParams) ─────────────────
-export default function GoogleIntegrationPage() {
+function GoogleIntegrationPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -1016,5 +1018,13 @@ export default function GoogleIntegrationPage() {
     }>
       <GoogleIntegrationInner />
     </Suspense>
+  );
+}
+
+export default function GoogleIntegrationPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.GOOGLE_INTEGRATION}>
+      <GoogleIntegrationPage />
+    </PermissionGate>
   );
 }

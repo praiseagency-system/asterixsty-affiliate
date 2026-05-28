@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
-export default function LeaderboardsPage() {
+function LeaderboardsPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -46,5 +48,13 @@ export default function LeaderboardsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LeaderboardsPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <LeaderboardsPage />
+    </PermissionGate>
   );
 }

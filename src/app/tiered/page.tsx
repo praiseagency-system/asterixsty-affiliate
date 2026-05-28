@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import SearchableSelect from "@/components/SearchableSelect";
 import { formatRupiah, formatNumber } from "@/lib/format";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 type Status = "UPCOMING" | "ONGOING" | "ACHIEVED" | "FAILED" | "EXPIRED";
@@ -789,7 +791,7 @@ function DetailDrawer({ program, onClose, onEdit, onDelete, onProgramUpdate }: {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function AffiliateProgramPage() {
+function AffiliateProgramPage() {
   const [items,   setItems]   = useState<Program[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [total,   setTotal]   = useState(0);
@@ -953,5 +955,13 @@ export default function AffiliateProgramPage() {
         onProgramUpdate={handleProgramPatch}
       />
     </div>
+  );
+}
+
+export default function AffiliateProgramPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <AffiliateProgramPage />
+    </PermissionGate>
   );
 }

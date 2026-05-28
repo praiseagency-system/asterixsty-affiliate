@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 type Step = { label: string; done: boolean; active: boolean };
 
@@ -96,7 +98,7 @@ function normalizeRows(rows: Record<string, string>[]): Record<string, string | 
   });
 }
 
-export default function ImportPage() {
+function ImportPage() {
   const [type, setType] = useState<"mingguan" | "bulanan">("bulanan");
   // Bulanan
   const [periode, setPeriode] = useState("");
@@ -454,5 +456,13 @@ export default function ImportPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ImportPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_MONITORING}>
+      <ImportPage />
+    </PermissionGate>
   );
 }

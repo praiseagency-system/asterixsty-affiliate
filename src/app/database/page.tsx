@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { formatNumber } from "@/lib/format";
 import SearchableSelect from "@/components/SearchableSelect";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
+import { usePermission } from "@/contexts/PermissionContext";
 import ConfirmModal from "@/components/ConfirmModal";
 import { VISUAL_TAKE } from "@/lib/constants";
 
@@ -1019,7 +1022,8 @@ function BulkActionBar({ selectedIds, allItems, groups, onDone, onClear }: {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function DatabasePage() {
+function DatabasePage() {
+  const { can } = usePermission();
   const [items, setItems]                       = useState<AffiliateDB[]>([]);
   const [total, setTotal]                       = useState(0);
   const [page, setPage]                         = useState(1);
@@ -1122,10 +1126,12 @@ export default function DatabasePage() {
             className="border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">⬇️ Export</button>
           <button onClick={() => { setShowImport(!showImport); setShowForm(false); }}
             className="border border-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">⬆️ Import</button>
-          <button onClick={() => { setShowForm(true); setShowImport(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
-            + Tambah Affiliate
-          </button>
+          {can(PERMISSIONS.CREATE_AFFILIATE) && (
+            <button onClick={() => { setShowForm(true); setShowImport(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
+              + Tambah Affiliate
+            </button>
+          )}
         </div>
       </div>
 
@@ -1326,5 +1332,13 @@ export default function DatabasePage() {
         />
       )}
     </div>
+  );
+}
+
+export default function DatabasePageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_AFFILIATE}>
+      <DatabasePage />
+    </PermissionGate>
   );
 }

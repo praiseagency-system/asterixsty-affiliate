@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { invalidateCache } from "@/lib/tier";
+import { requirePermission, permError } from "@/lib/permission-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,9 @@ export async function GET() {
 
 // ─── PUT /api/admin/config ─────────────────────────────────────────────────
 export async function PUT(req: Request) {
+  const check = await requirePermission(req, PERMISSIONS.EDIT_WORKSPACE);
+  if ("error" in check) return permError(check);
+
   const body = await req.json();
   const { tierConfig, gmvCriteria, qtyCriteria, deadlineConfig } = body as {
     tierConfig: { id: number; tier: string; label: string; minGmv: number; color: string }[];

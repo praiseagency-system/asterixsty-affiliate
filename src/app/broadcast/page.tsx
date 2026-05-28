@@ -4,6 +4,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { VISUAL_TAKE } from "@/lib/constants";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Group { id: number; name: string; color: string; }
@@ -2075,7 +2077,7 @@ function BroadcastPageInner() {
 }
 
 // ─── Page wrapper with Suspense (required for useSearchParams in Next.js 15) ──
-export default function BroadcastPage() {
+function BroadcastPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center py-24">
@@ -2084,5 +2086,13 @@ export default function BroadcastPage() {
     }>
       <BroadcastPageInner />
     </Suspense>
+  );
+}
+
+export default function BroadcastPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_BROADCAST}>
+      <BroadcastPage />
+    </PermissionGate>
   );
 }

@@ -6,6 +6,9 @@ import Link from "next/link";
 import { CAMPAIGN_OBJECTIVES, OBJECTIVE_META, VISUAL_TAKE } from "@/lib/constants";
 import { useMasterData } from "@/lib/useMasterData";
 import type { Specialist, Category, Product } from "@/lib/useMasterData";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
+import { usePermission } from "@/contexts/PermissionContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; bg: string; text: string; dot: string }> = {
@@ -1152,8 +1155,9 @@ function CreateModal({ specialists, categories, products, masterLoading, onClose
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function CampaignsPage() {
+function CampaignsPage() {
   const router = useRouter();
+  const { can } = usePermission();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
@@ -1242,10 +1246,12 @@ export default function CampaignsPage() {
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
             📋 Templates
           </Link>
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
-            <span className="text-base leading-none">+</span>Buat Campaign
-          </button>
+          {can(PERMISSIONS.CREATE_CAMPAIGN) && (
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
+              <span className="text-base leading-none">+</span>Buat Campaign
+            </button>
+          )}
         </div>
       </div>
 
@@ -1303,7 +1309,7 @@ export default function CampaignsPage() {
           <p className="text-sm text-gray-400 mb-5">
             {search ? `Tidak ada hasil untuk "${search}"` : "Buat campaign pertama Anda sekarang"}
           </p>
-          {!search && (
+          {!search && can(PERMISSIONS.CREATE_CAMPAIGN) && (
             <button onClick={() => setShowCreate(true)}
               className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
               + Buat Campaign
@@ -1328,5 +1334,13 @@ export default function CampaignsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function CampaignsPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CAMPAIGN}>
+      <CampaignsPage />
+    </PermissionGate>
   );
 }

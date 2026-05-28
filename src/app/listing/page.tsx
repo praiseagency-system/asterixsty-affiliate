@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { formatRupiah, formatNumber } from "@/lib/format";
 import ConfirmModal from "@/components/ConfirmModal";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 import { VISUAL_TAKE } from "@/lib/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -490,7 +492,7 @@ function EditListingModal({ item, onSuccess, onCancel }: { item: ListingItem; on
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function ListingPage() {
+function ListingPage() {
   const [items, setItems] = useState<ListingItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -805,5 +807,13 @@ export default function ListingPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ListingPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_AFFILIATE}>
+      <ListingPage />
+    </PermissionGate>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { usePermission } from "@/contexts/PermissionContext";
+import PermissionGate from "@/components/PermissionGate";
 import {
   PERMISSIONS,
   PERMISSION_CATEGORIES,
@@ -689,7 +690,7 @@ function MemberRow({ member, canEdit, canEditPerms, onUpdated, onToast }: {
 }
 
 // ─── Team Page ────────────────────────────────────────────────────────────────
-export default function TeamPage() {
+function TeamPage() {
   const { current, loading: wsLoading } = useWorkspace();
   const { can, canAny }                 = usePermission();
   const [members,  setMembers]  = useState<Member[]>([]);
@@ -879,5 +880,13 @@ export default function TeamPage() {
         <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
       )}
     </div>
+  );
+}
+
+export default function TeamPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_TEAM} requireAny>
+      <TeamPage />
+    </PermissionGate>
   );
 }

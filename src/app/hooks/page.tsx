@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PermissionGate from "@/components/PermissionGate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface Hook {
   id: number;
@@ -9,7 +11,7 @@ interface Hook {
   detail: string;
 }
 
-export default function HooksPage() {
+function HooksPage() {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -79,5 +81,13 @@ export default function HooksPage() {
         <p className="text-gray-400 text-sm">Tidak ada formula yang cocok dengan pencarian.</p>
       )}
     </div>
+  );
+}
+
+export default function HooksPageGate() {
+  return (
+    <PermissionGate permission={PERMISSIONS.VIEW_CONTENT}>
+      <HooksPage />
+    </PermissionGate>
   );
 }

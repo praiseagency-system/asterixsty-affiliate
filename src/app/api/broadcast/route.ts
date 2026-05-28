@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { isAnySessionConnected, getPrimaryPhone } from "@/lib/wa-multi-client";
 import { resolveWorkspaceId } from "@/lib/workspace-guard";
+import { requirePermission, permError } from "@/lib/permission-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,9 @@ export async function GET(req: Request) {
 
 // POST /api/broadcast — create broadcast + populate WA queue
 export async function POST(req: Request) {
+  const check = await requirePermission(req, PERMISSIONS.CREATE_BROADCAST);
+  if ("error" in check) return permError(check);
+
   const prisma = getPrisma();   // always get live client (handles stale singleton in dev)
   try {
     const wsId = resolveWorkspaceId(req) ?? 1;
