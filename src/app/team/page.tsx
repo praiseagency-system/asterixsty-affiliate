@@ -170,9 +170,10 @@ function InviteModal({
         }),
       });
       const data = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) { setError(data.error || "Failed to invite member"); }
-      else {
-        onDone(`Invitation sent to ${email.trim()} for ${selectedWsIds.size} workspace${selectedWsIds.size > 1 ? "s" : ""}`);
+      if (!res.ok) {
+        setError(data.error || "Failed to send invitation email");
+      } else {
+        onDone(`Invitation email sent successfully to ${email.trim()}`);
       }
     } catch { setError("Network error. Please try again."); }
     finally  { setBusy(false); }
@@ -594,9 +595,12 @@ function MemberRow({ member, canEdit, canEditPerms, onUpdated, onToast }: {
         body:    JSON.stringify({ memberId: member.id, workspaceId: member.workspaceId }),
       });
       const d = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) { onToast(d.error || "Failed to resend invite", "error"); }
-      else { onToast(`Invite resent to ${member.inviteEmail}`, "success"); }
-    } catch { onToast("Network error", "error"); }
+      if (!res.ok) {
+        onToast(d.error || "Failed to send invitation email", "error");
+      } else {
+        onToast("Invitation email sent successfully", "success");
+      }
+    } catch { onToast("Network error. Please try again.", "error"); }
     finally  { setResending(false); }
   }
 
