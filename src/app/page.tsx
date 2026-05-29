@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatRupiah, formatNumber } from "@/lib/format";
+import { SkeletonDashboard } from "@/components/Skeleton";
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -620,14 +621,7 @@ export default function Dashboard() {
     return `${mo} ${yr}`;
   }, [data]);
 
-  if (loading && !data) return (
-    <div className="flex items-center justify-center h-64 text-faint">
-      <div className="text-center">
-        <div className="text-4xl mb-3 animate-pulse">📊</div>
-        <p className="text-sm font-medium text-muted">Memuat dashboard...</p>
-      </div>
-    </div>
-  );
+  if (loading && !data) return <SkeletonDashboard />;
 
   const isEmpty = !data?.kpi || data.kpi.totalGmv === 0;
   const kpi     = data?.kpi;

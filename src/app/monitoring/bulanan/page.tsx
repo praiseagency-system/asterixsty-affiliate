@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { formatRupiah, formatNumber, formatCtr } from "@/lib/format";
 import PermissionGate from "@/components/PermissionGate";
 import { PERMISSIONS } from "@/lib/permissions";
+import { Skeleton } from "@/components/Skeleton";
 
 interface MonitorRow {
   no: number;
@@ -384,7 +385,15 @@ function MonitoringBulanan() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={18} className="px-4 py-10 text-center text-gray-400">Memuat...</td></tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b border-border">
+                    {[20, 120, 100, 90, 90, 80, 80, 70, 70, 60, 60, 50, 50, 80, 80, 80, 70, 50].map((w, j) => (
+                      <td key={j} className="px-2.5 py-3">
+                        <Skeleton className="h-4 rounded" style={{ width: w }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : paginated.length === 0 ? (
                 <tr><td colSpan={18} className="px-4 py-10 text-center text-gray-400">
                   {hasFilters ? "Tidak ada data dengan filter ini." : "Belum ada data. Import data bulanan di menu Import Data."}
