@@ -31,8 +31,8 @@ export async function GET(req: Request) {
   ]);
 
   return NextResponse.json({
-    licenseKey:   workspace.licenseKey,
-    workspaceId:  workspace.name,
+    licenseKey:    workspace.licenseKey ?? "",
+    workspaceId:   workspace.name,
     workspaceName: workspace.name,
     brandName:    workspace.agency?.name ?? workspace.name,
     isActive:     true,
@@ -64,5 +64,5 @@ export async function POST(req: Request) {
     data:  { licenseKey: newKey },
   });
 
-  return NextResponse.json({ licenseKey: updated.licenseKey });
+  return NextResponse.json({ licenseKey: updated.licenseKey ?? newKey });
 }

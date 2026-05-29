@@ -86,7 +86,7 @@ model Workspace {
   slug        String    @unique @default("")
   logoUrl     String    @default("")
   theme       String    @default("{}") // JSON: { primaryColor, accentColor }
-  licenseKey  String    @unique @default("") // Chrome extension auth key
+  licenseKey  String?   @unique               // Chrome extension auth key (null = belum di-set)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
