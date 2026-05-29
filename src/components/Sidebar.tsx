@@ -155,7 +155,8 @@ const GROUPS: GroupConfig[] = [
       { href: "/admin",              labelKey: "nav.systemConfig",      iconKey: "settings",     permission: PERMISSIONS.EDIT_WORKSPACE    },
       { href: "/automation",         labelKey: "nav.automationCenter",  iconKey: "chip",         permission: PERMISSIONS.MANAGE_WHATSAPP   },
       { href: "/branding",           labelKey: "nav.brandingSettings",  iconKey: "colorSwatch",  permission: PERMISSIONS.BRANDING_SETTINGS  },
-      { href: "/google-integration", labelKey: "nav.googleIntegration", iconKey: "externalLink", permission: PERMISSIONS.GOOGLE_INTEGRATION },
+      { href: "/google-integration",     labelKey: "nav.googleIntegration", iconKey: "externalLink", permission: PERMISSIONS.GOOGLE_INTEGRATION },
+      { href: "/settings/scraper-license", labelKey: "nav.scraperLicense",    iconKey: "clipboard",    permission: PERMISSIONS.EDIT_WORKSPACE     },
     ],
   },
 ];

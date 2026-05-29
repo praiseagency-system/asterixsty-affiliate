@@ -5,7 +5,25 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding master data...");
 
-  // Skip seed if master data already exists (idempotent — safe to run on every deploy)
+  // ── License keys — always run (idempotent upsert) ─────────────────────────
+  // Maps workspace slug → { name (internal), brandName (display), licenseKey }
+  const LICENSE_MAP: Record<string, { name: string; brandName: string; licenseKey: string }> = {
+    "asterixsty": { name: "ws_asterixsty_001", brandName: "Asterixsty Perfumery", licenseKey: "PRAISE-ASTERIXSTY-001" },
+    "ameena":     { name: "ws_ameena_001",     brandName: "Ameena Hijab",          licenseKey: "PRAISE-AMEENA-001"     },
+    "dasfelix":   { name: "ws_dasfelix_001",   brandName: "Dasfelix Perfume",      licenseKey: "PRAISE-DASFELIX-001"   },
+  };
+
+  const allWorkspaces = await prisma.workspace.findMany();
+  for (const ws of allWorkspaces) {
+    const mapped = LICENSE_MAP[ws.slug] ?? null;
+    const key    = mapped?.licenseKey ?? (ws.licenseKey || `PRAISE-${ws.slug.toUpperCase()}-${ws.id.toString().padStart(3, "0")}`);
+    if (ws.licenseKey !== key) {
+      await prisma.workspace.update({ where: { id: ws.id }, data: { licenseKey: key } });
+      console.log(`✅ License key for "${ws.slug}": ${key}`);
+    }
+  }
+
+  // ── Skip product/specialist data if already seeded ────────────────────────
   const existingProductCount = await prisma.product.count();
   if (existingProductCount > 0) {
     console.log("✅ Data sudah ada, skip seed.");
@@ -143,21 +161,6 @@ async function main() {
         affiliateItemsRefunded: 0,
       },
     });
-  }
-
-  // ── Seed license keys for existing workspaces ──────────────────────────────
-  // Idempotent: only updates workspaces that still have an empty licenseKey.
-  const workspaces = await prisma.workspace.findMany({
-    where: { licenseKey: "" },
-  });
-  for (const ws of workspaces) {
-    const slug = ws.slug || ws.name.toLowerCase().replace(/\s+/g, "-");
-    const key  = `PRAISE-${slug.toUpperCase()}-${ws.id.toString().padStart(3, "0")}`;
-    await prisma.workspace.update({
-      where: { id: ws.id },
-      data:  { licenseKey: key },
-    });
-    console.log(`✅ License key set for workspace "${ws.name}": ${key}`);
   }
 
   console.log("✅ Seed selesai!");
