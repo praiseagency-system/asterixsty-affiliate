@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useBranding } from "@/contexts/BrandingContext";
 import { PermissionDebugPanel } from "@/components/PermissionDebugPanel";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Routes that should render without the app shell (no sidebar)
 const SHELL_LESS_ROUTES = ["/login"];
@@ -86,9 +87,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           key={current?.id} forces every page component to unmount + remount
           whenever the active workspace changes, so all useEffect fetch hooks re-run.
         */}
-        <div key={current?.id ?? 0} className="p-4 lg:p-6 max-w-screen-2xl mx-auto w-full flex-1">
-          {children}
-        </div>
+        <ErrorBoundary key={current?.id ?? 0}>
+          <div className="p-4 lg:p-6 max-w-screen-2xl mx-auto w-full flex-1">
+            {children}
+          </div>
+        </ErrorBoundary>
       </main>
 
       {/* Dev-only permission debug panel */}

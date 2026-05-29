@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatRupiah, formatNumber } from "@/lib/format";
 import { SkeletonDashboard } from "@/components/Skeleton";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -459,7 +460,7 @@ function KpiCard({ label, value, icon, accent, sub, current, prev, higherIsBette
   const fmt      = fmtDelta ?? formatRupiah;
 
   return (
-    <div className="bg-surface rounded-xl border border-border shadow-sm p-4 flex gap-3 items-start">
+    <div className="bg-surface rounded-xl border border-border shadow-sm p-4 flex gap-3 items-start hover-lift">
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${accent}`}>
         {icon}
       </div>
@@ -688,6 +689,9 @@ export default function Dashboard() {
             <KpiCard label="Avg GMV/Creator" value={formatRupiah(kpi!.avgGmvPerCreator)} icon="📈" accent="bg-teal-50 text-teal-600"
               current={kpi!.avgGmvPerCreator} prev={data?.prevKpi?.avgGmvPerCreator} />
           </div>
+
+          {/* ── Onboarding checklist (auto-hides when all done / dismissed) ── */}
+          <OnboardingChecklist />
 
           {/* ── Financial Overview ─────────────────────────────────────── */}
           {data?.financial && (
