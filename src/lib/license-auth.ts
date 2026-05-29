@@ -40,7 +40,8 @@ export async function requireLicense(
       return { ok: false, error: "Invalid or expired license key", status: 401 };
     }
 
-    return { ok: true, ...workspace };
+    // licenseKey from the bearer token — already validated as non-empty string above
+    return { ok: true, id: workspace.id, name: workspace.name, licenseKey };
   } catch (err) {
     console.error("[license-auth]", err);
     return { ok: false, error: "Auth check failed", status: 500 };
