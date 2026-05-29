@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveWorkspaceId } from "@/lib/workspace-guard";
 import { requirePermission, permError } from "@/lib/permission-guard";
 import { PERMISSIONS } from "@/lib/permissions";
+import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,16 @@ export async function POST(req: Request) {
       groups:              Array.isArray(body.groups) ? JSON.stringify(body.groups) : (body.groups || "[]"),
     },
   });
+  // Fire-and-forget notification
+  void createNotification({
+    workspaceId: wsId,
+    type:  "affiliate_new",
+    title: "Afiliasi baru ditambahkan",
+    body:  `@${item.tiktokUsername}${item.namaAffiliator ? ` (${item.namaAffiliator})` : ""} berhasil masuk database.`,
+    href:  `/affiliate/database`,
+    excludeUserId: check.userId,
+  });
+
   return NextResponse.json(item, { status: 201 });
 }
 

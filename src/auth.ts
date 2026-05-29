@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -58,6 +59,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             await prisma.workspaceMember.update({
               where: { id: invite.id },
               data:  { userId: user.id, status: "active", inviteToken: null },
+            });
+            // Notify all ADMIN+ of this workspace that the invite was accepted
+            void createNotification({
+              workspaceId:   invite.workspaceId,
+              type:          "invite_accepted",
+              title:         "Undangan tim diterima",
+              body:          `${user.name ?? user.email} telah bergabung ke workspace ini.`,
+              href:          `/workspace/team`,
+              excludeUserId: user.id,
             });
           }
         } catch (err) {

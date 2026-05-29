@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...(body.picName            !== undefined ? { picName:  String(body.picName) }                    : {}),
     },
   });
+
+  // Notify when delivery flips to Selesai
+  if (statusProgress === "Selesai" && current.statusProgress !== "Selesai") {
+    void createNotification({
+      workspaceId: current.workspaceId,
+      type:  "sample_update",
+      title: "Pengiriman sample selesai",
+      body:  `Semua ${current.totalVideoTarget} video dari @${current.affiliateUsername} telah selesai.`,
+      href:  `/affiliate/sample-delivery`,
+    });
+  }
 
   return NextResponse.json({
     ...updated,

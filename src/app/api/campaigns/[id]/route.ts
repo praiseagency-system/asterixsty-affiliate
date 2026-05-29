@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { requirePermission, permError } from "@/lib/permission-guard";
 import { PERMISSIONS } from "@/lib/permissions";
+import { createNotification } from "@/lib/notifications";
+import { resolveWorkspaceId } from "@/lib/workspace-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +93,12 @@ export async function PATCH(req: Request, { params }: Params) {
       }
     }
 
+    // Fetch current status before update (for change detection)
+    const before = await prisma.campaign.findUnique({
+      where:  { id: Number(id) },
+      select: { status: true, nama: true, workspaceId: true },
+    });
+
     const updated = await prisma.campaign.update({
       where:   { id: Number(id) },
       data,
@@ -99,6 +107,20 @@ export async function PATCH(req: Request, { params }: Params) {
         productFocus:  productFocusInclude,
       },
     });
+
+    // Notify when status changes
+    if ("status" in body && before && String(body.status) !== before.status) {
+      const wsId = resolveWorkspaceId(req) ?? before.workspaceId;
+      void createNotification({
+        workspaceId:   wsId,
+        type:          "campaign_status",
+        title:         "Status campaign berubah",
+        body:          `"${updated.nama}" berubah dari ${before.status} → ${updated.status}.`,
+        href:          `/program/campaign`,
+        excludeUserId: check.userId,
+      });
+    }
+
     return NextResponse.json(updated);
   } catch (err) {
     console.error("[PATCH /api/campaigns/:id]", err);

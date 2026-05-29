@@ -502,6 +502,24 @@ model AppConfig {
   value String
 }
 
+// ── In-app Notifications ──────────────────────────────────────────────────────
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  userId      String    // target user (User.id)
+  type        String    // affiliate_new | campaign_status | invite_accepted | sample_update | broadcast_done
+  title       String
+  body        String    @default("")
+  href        String    @default("") // deep-link path within the app
+  read        Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, userId, read])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
 model ReminderLog {
   id           Int      @id @default(autoincrement())
   workspaceId  Int      @default(1)

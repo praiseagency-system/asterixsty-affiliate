@@ -10,6 +10,7 @@ import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { usePermission } from "@/contexts/PermissionContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { PERMISSIONS } from "@/lib/permissions";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // ─── SVG Icon primitive ───────────────────────────────────────────────────────
 function Icon({ d, className = "" }: { d: string | readonly string[]; className?: string }) {
@@ -486,6 +487,9 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{userName}</p>
             <p className="text-[10px] text-faint truncate leading-tight">{userEmail}</p>
           </div>
+          {/* Notification bell (desktop sidebar) */}
+          <NotificationBell />
+
           {session && (
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}

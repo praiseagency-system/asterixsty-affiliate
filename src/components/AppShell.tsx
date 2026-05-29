@@ -7,6 +7,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useBranding } from "@/contexts/BrandingContext";
 import { PermissionDebugPanel } from "@/components/PermissionDebugPanel";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // Routes that should render without the app shell (no sidebar)
 const SHELL_LESS_ROUTES = ["/login"];
@@ -72,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
 
           {/* Brand wordmark */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1 mr-1">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
               <span className="text-white text-[10px] font-bold">{brandName.slice(0, 2)}</span>
             </div>
@@ -80,6 +81,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-sm font-bold text-foreground truncate leading-tight">{brandSystem}</p>
             </div>
           </div>
+
+          {/* Notification bell (mobile header) */}
+          <NotificationBell />
         </header>
 
         {/* Page content */}
