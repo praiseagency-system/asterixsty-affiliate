@@ -5,7 +5,7 @@
     "buildCommand": "npm run build:railway"
   },
   "deploy": {
-    "startCommand": "npx prisma db push --accept-data-loss && next start",
+    "startCommand": "npx prisma db execute --file ./prisma/pre-migrate.sql --schema ./prisma/schema.prisma; npx prisma db push --accept-data-loss && npx prisma db seed && next start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
