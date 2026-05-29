@@ -145,6 +145,21 @@ async function main() {
     });
   }
 
+  // ── Seed license keys for existing workspaces ──────────────────────────────
+  // Idempotent: only updates workspaces that still have an empty licenseKey.
+  const workspaces = await prisma.workspace.findMany({
+    where: { licenseKey: "" },
+  });
+  for (const ws of workspaces) {
+    const slug = ws.slug || ws.name.toLowerCase().replace(/\s+/g, "-");
+    const key  = `PRAISE-${slug.toUpperCase()}-${ws.id.toString().padStart(3, "0")}`;
+    await prisma.workspace.update({
+      where: { id: ws.id },
+      data:  { licenseKey: key },
+    });
+    console.log(`✅ License key set for workspace "${ws.name}": ${key}`);
+  }
+
   console.log("✅ Seed selesai!");
 }
 

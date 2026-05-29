@@ -86,11 +86,14 @@ model Workspace {
   slug        String    @unique @default("")
   logoUrl     String    @default("")
   theme       String    @default("{}") // JSON: { primaryColor, accentColor }
+  licenseKey  String    @unique @default("") // Chrome extension auth key
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  agency      Agency    @relation(fields: [agencyId], references: [id])
-  members     WorkspaceMember[]
+  agency        Agency          @relation(fields: [agencyId], references: [id])
+  members       WorkspaceMember[]
+  scrapedOrders ScrapedOrder[]
+  scrapeLogs    ScrapeLog[]
 }
 
 model WorkspaceMember {
@@ -725,4 +728,62 @@ model WhatsappSession {
   updatedAt    DateTime  @updatedAt
 
   // ownerUserId is a plain string (userId) — no FK constraint so existing "" rows remain valid
+}
+
+// ── Chrome Extension Scraper ──────────────────────────────────────────────────
+
+// Raw orders scraped from Tokopedia / TikTok Shop by Chrome extension.
+// PIC reviews and confirms → status becomes "active" and flows into SampleDelivery.
+model ScrapedOrder {
+  id                  Int       @id @default(autoincrement())
+  workspaceId         Int
+  tiktokUsername      String    @default("")
+  creatorName         String    @default("")
+  creatorPhone        String    @default("")
+  creatorAddress      String    @default("")
+
+  // Order data from scraper
+  orderId             String    @unique
+  orderStatus         String    @default("")
+  orderDate           String    @default("")
+  productName         String    @default("")
+  productSku          String    @default("")
+  productImageUrl     String    @default("")
+  shippingProvider    String    @default("")
+  trackingNumber      String    @default("")
+  platform            String    @default("tokopedia") // tokopedia | tiktok
+
+  // PIC review fields (filled after confirmation)
+  kategoriPengiriman  String    @default("") // First Collaboration | Campaign Support | etc
+  targetVideo         Int       @default(0)
+  picName             String    @default("")
+  catatan             String    @default("")
+
+  // Status lifecycle
+  // pending_confirmation → active → completed | cancelled
+  status              String    @default("pending_confirmation")
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([tiktokUsername])
+}
+
+// Audit log per scrape session from Chrome extension
+model ScrapeLog {
+  id           Int      @id @default(autoincrement())
+  workspaceId  Int
+  platform     String   @default("tokopedia")
+  totalRecords Int      @default(0)
+  newRecords   Int      @default(0)
+  duplicates   Int      @default(0)
+  status       String   @default("success")
+  scrapedAt    DateTime @default(now())
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, scrapedAt(sort: Desc)])
 }
