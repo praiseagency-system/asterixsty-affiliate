@@ -139,7 +139,16 @@ model Product {
   id           Int                    @id @default(autoincrement())
   no           Int
   nama         String
-  hpp          Float
+  hpp          Float                  @default(0)
+  // ── Platform identity ─────────────────────────────────────────────────────
+  skuId        String                 @default("")  // Platform SKU/product ID (used to match scraped orders)
+  productLink  String                 @default("")  // URL to product listing page
+  productImage String                 @default("")  // URL to product main image
+  // ── Catalog metadata ──────────────────────────────────────────────────────
+  category     String                 @default("")  // Product category (free-text or pick from list)
+  platform     String                 @default("")  // tiktok | tokopedia | shopee | offline | all
+  activeStatus String                 @default("ACTIVE")  // ACTIVE | INACTIVE
+
   productFocus CampaignProductFocus[]
 }
 

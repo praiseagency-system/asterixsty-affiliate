@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import PermissionGate from "@/components/PermissionGate";
 import { PERMISSIONS } from "@/lib/permissions";
 
-interface Product    { id: number; no: number; nama: string; hpp: number }
+interface Product {
+  id: number; no: number; nama: string; hpp: number;
+  skuId: string; productLink: string; productImage: string;
+  category: string; platform: string; activeStatus: string;
+}
 interface Specialist { id: number; no: number; nama: string }
 interface Category   { id: number; no: number; nama: string; deskripsi: string }
 interface MasterData { products: Product[]; specialists: Specialist[]; categories: Category[] }
@@ -268,7 +272,17 @@ function MasterPage() {
     if (!form.nama?.trim()) return;
     setAdding(true);
     try {
-      const payload = { nama: form.nama.trim(), hpp: Number(form.hpp || 0), deskripsi: form.deskripsi || "" };
+      const payload = {
+        nama:         form.nama.trim(),
+        hpp:          Number(form.hpp || 0),
+        deskripsi:    form.deskripsi    || "",
+        skuId:        form.skuId        || "",
+        productLink:  form.productLink  || "",
+        productImage: form.productImage || "",
+        category:     form.category     || "",
+        platform:     form.platform     || "",
+        activeStatus: form.activeStatus || "ACTIVE",
+      };
       const res = await fetch("/api/master", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -294,7 +308,16 @@ function MasterPage() {
     setEditId(id);
     if (type === "product") {
       const item = data.products.find(p => p.id === id);
-      if (item) setEditForm({ nama: item.nama, hpp: String(item.hpp) });
+      if (item) setEditForm({
+        nama:         item.nama,
+        hpp:          String(item.hpp),
+        skuId:        item.skuId        || "",
+        productLink:  item.productLink  || "",
+        productImage: item.productImage || "",
+        category:     item.category     || "",
+        platform:     item.platform     || "",
+        activeStatus: item.activeStatus || "ACTIVE",
+      });
     } else if (type === "specialist") {
       const item = data.specialists.find(s => s.id === id);
       if (item) setEditForm({ nama: item.nama });
@@ -307,7 +330,17 @@ function MasterPage() {
   async function handleEdit(type: string) {
     if (!editId || !editForm.nama?.trim()) return;
     setEditSaving(true);
-    const payload = { nama: editForm.nama.trim(), hpp: Number(editForm.hpp || 0), deskripsi: editForm.deskripsi || "" };
+    const payload = {
+      nama:         editForm.nama.trim(),
+      hpp:          Number(editForm.hpp || 0),
+      deskripsi:    editForm.deskripsi    || "",
+      skuId:        editForm.skuId        || "",
+      productLink:  editForm.productLink  || "",
+      productImage: editForm.productImage || "",
+      category:     editForm.category     || "",
+      platform:     editForm.platform     || "",
+      activeStatus: editForm.activeStatus || "ACTIVE",
+    };
     const res = await fetch("/api/master", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -449,13 +482,18 @@ function MasterPage() {
           {/* Add form */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h2 className="font-semibold text-gray-800 mb-4 text-sm">Tambah Produk Baru</h2>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
               <input
-                placeholder="Nama produk"
+                placeholder="Nama produk *"
                 value={form.nama || ""}
                 onChange={e => setForm(f => ({ ...f, nama: e.target.value }))}
-                onKeyDown={e => e.key === "Enter" && handleAdd("product")}
-                className={`${inputCls} flex-1`}
+                className={`${inputCls}`}
+              />
+              <input
+                placeholder="SKU ID (e.g. 584272299238131038)"
+                value={form.skuId || ""}
+                onChange={e => setForm(f => ({ ...f, skuId: e.target.value }))}
+                className={`${inputCls} font-mono text-xs`}
               />
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">Rp</span>
@@ -464,17 +502,55 @@ function MasterPage() {
                   placeholder="HPP"
                   value={form.hpp || ""}
                   onChange={e => setForm(f => ({ ...f, hpp: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && handleAdd("product")}
-                  className={`${inputCls} w-40 pl-8`}
+                  className={`${inputCls} w-full pl-8`}
                 />
               </div>
+              <input
+                placeholder="URL Produk (https://...)"
+                value={form.productLink || ""}
+                onChange={e => setForm(f => ({ ...f, productLink: e.target.value }))}
+                className={`${inputCls}`}
+              />
+              <input
+                placeholder="URL Gambar Produk"
+                value={form.productImage || ""}
+                onChange={e => setForm(f => ({ ...f, productImage: e.target.value }))}
+                className={`${inputCls}`}
+              />
+              <input
+                placeholder="Kategori (Parfum, Skincare, dll)"
+                value={form.category || ""}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                className={`${inputCls}`}
+              />
+              <select
+                value={form.platform || ""}
+                onChange={e => setForm(f => ({ ...f, platform: e.target.value }))}
+                className={`${inputCls}`}
+              >
+                <option value="">Platform (opsional)</option>
+                <option value="tiktok">TikTok Shop</option>
+                <option value="tokopedia">Tokopedia</option>
+                <option value="shopee">Shopee</option>
+                <option value="all">Semua Platform</option>
+              </select>
+              <select
+                value={form.activeStatus || "ACTIVE"}
+                onChange={e => setForm(f => ({ ...f, activeStatus: e.target.value }))}
+                className={`${inputCls}`}
+              >
+                <option value="ACTIVE">Aktif</option>
+                <option value="INACTIVE">Tidak Aktif</option>
+              </select>
+            </div>
+            <div className="flex justify-end">
               <button
                 onClick={() => handleAdd("product")}
                 disabled={adding || !form.nama?.trim()}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {adding ? <SpinIcon /> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}
-                Tambah
+                Tambah Produk
               </button>
             </div>
           </div>
@@ -489,90 +565,186 @@ function MasterPage() {
                 <p className="text-xs text-gray-300">Tambah produk menggunakan form di atas</p>
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-12">No</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Nama Produk</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-44">HPP</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 w-24">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {data.products.map((p) => (
-                    <tr key={p.id} className="group hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 text-xs">{p.no}</td>
-
-                      {editId === p.id ? (
-                        <>
-                          <td className="px-4 py-2">
-                            <input
-                              value={editForm.nama || ""}
-                              onChange={e => setEditForm(f => ({ ...f, nama: e.target.value }))}
-                              onKeyDown={e => { if (e.key === "Enter") handleEdit("product"); if (e.key === "Escape") setEditId(null); }}
-                              className={editInputCls}
-                              autoFocus
-                            />
-                          </td>
-                          <td className="px-4 py-2">
-                            <div className="relative">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
-                              <input
-                                type="number"
-                                value={editForm.hpp || ""}
-                                onChange={e => setEditForm(f => ({ ...f, hpp: e.target.value }))}
-                                onKeyDown={e => { if (e.key === "Enter") handleEdit("product"); if (e.key === "Escape") setEditId(null); }}
-                                className={`${editInputCls} pl-8`}
-                              />
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 text-right">
-                            <div className="flex justify-end gap-1">
-                              <button
-                                onClick={() => handleEdit("product")}
-                                disabled={editSaving}
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                {editSaving ? <SpinIcon /> : <SaveIcon />} Simpan
-                              </button>
-                              <button
-                                onClick={() => setEditId(null)}
-                                disabled={editSaving}
-                                className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="px-4 py-3 font-medium text-gray-900">{p.nama}</td>
-                          <td className="px-4 py-3 text-gray-600">Rp {p.hpp.toLocaleString("id-ID")}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => startEdit(p.id, "product")}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                                title="Edit"
-                              >
-                                <EditIcon />
-                              </button>
-                              <button
-                                onClick={() => setDelConfirm({ id: p.id, type: "product", nama: p.nama })}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Hapus"
-                              >
-                                <TrashIcon />
-                              </button>
-                            </div>
-                          </td>
-                        </>
-                      )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[700px]">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-10">No</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Nama Produk</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-48">SKU ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-36">HPP</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-28">Platform</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 w-20">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 w-20">Aksi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {data.products.map((p) => (
+                      <tr key={p.id} className="group hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 py-3 text-gray-400 text-xs">{p.no}</td>
+
+                        {editId === p.id ? (
+                          <>
+                            <td className="px-2 py-2" colSpan={5}>
+                              {/* Edit inline — 2-row grid */}
+                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-2">
+                                <input
+                                  value={editForm.nama || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, nama: e.target.value }))}
+                                  placeholder="Nama produk *"
+                                  className={editInputCls}
+                                  autoFocus
+                                />
+                                <input
+                                  value={editForm.skuId || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, skuId: e.target.value }))}
+                                  placeholder="SKU ID"
+                                  className={`${editInputCls} font-mono text-xs`}
+                                />
+                                <div className="relative">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">Rp</span>
+                                  <input
+                                    type="number"
+                                    value={editForm.hpp || ""}
+                                    onChange={e => setEditForm(f => ({ ...f, hpp: e.target.value }))}
+                                    placeholder="HPP"
+                                    className={`${editInputCls} pl-8`}
+                                  />
+                                </div>
+                                <input
+                                  value={editForm.productLink || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, productLink: e.target.value }))}
+                                  placeholder="URL Produk"
+                                  className={editInputCls}
+                                />
+                                <input
+                                  value={editForm.productImage || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, productImage: e.target.value }))}
+                                  placeholder="URL Gambar"
+                                  className={editInputCls}
+                                />
+                                <input
+                                  value={editForm.category || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                                  placeholder="Kategori"
+                                  className={editInputCls}
+                                />
+                                <select
+                                  value={editForm.platform || ""}
+                                  onChange={e => setEditForm(f => ({ ...f, platform: e.target.value }))}
+                                  className={editInputCls}
+                                >
+                                  <option value="">Platform</option>
+                                  <option value="tiktok">TikTok Shop</option>
+                                  <option value="tokopedia">Tokopedia</option>
+                                  <option value="shopee">Shopee</option>
+                                  <option value="all">Semua Platform</option>
+                                </select>
+                                <select
+                                  value={editForm.activeStatus || "ACTIVE"}
+                                  onChange={e => setEditForm(f => ({ ...f, activeStatus: e.target.value }))}
+                                  className={editInputCls}
+                                >
+                                  <option value="ACTIVE">Aktif</option>
+                                  <option value="INACTIVE">Tidak Aktif</option>
+                                </select>
+                              </div>
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  onClick={() => handleEdit("product")}
+                                  disabled={editSaving}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  {editSaving ? <SpinIcon /> : <SaveIcon />} Simpan
+                                </button>
+                                <button
+                                  onClick={() => setEditId(null)}
+                                  disabled={editSaving}
+                                  className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-gray-900">{p.nama}</div>
+                              {p.category && <div className="text-xs text-gray-400 mt-0.5">{p.category}</div>}
+                            </td>
+                            <td className="px-4 py-3">
+                              {p.skuId ? (
+                                <span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{p.skuId}</span>
+                              ) : (
+                                <span className="text-xs text-gray-300">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {p.hpp > 0 ? `Rp ${p.hpp.toLocaleString("id-ID")}` : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              {p.platform ? (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  p.platform === "tiktok"    ? "bg-pink-50 text-pink-700" :
+                                  p.platform === "tokopedia" ? "bg-green-50 text-green-700" :
+                                  p.platform === "shopee"    ? "bg-orange-50 text-orange-700" :
+                                  "bg-gray-100 text-gray-600"
+                                }`}>
+                                  {p.platform === "tiktok" ? "TikTok" :
+                                   p.platform === "tokopedia" ? "Tokopedia" :
+                                   p.platform === "shopee" ? "Shopee" :
+                                   p.platform === "all" ? "Semua" : p.platform}
+                                </span>
+                              ) : <span className="text-xs text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                p.activeStatus === "INACTIVE"
+                                  ? "bg-gray-100 text-gray-500"
+                                  : "bg-green-50 text-green-700"
+                              }`}>
+                                {p.activeStatus === "INACTIVE" ? "Nonaktif" : "Aktif"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {p.productLink && (
+                                  <a
+                                    href={p.productLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                    title="Buka Link Produk"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                  </a>
+                                )}
+                                <button
+                                  onClick={() => startEdit(p.id, "product")}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                  title="Edit"
+                                >
+                                  <EditIcon />
+                                </button>
+                                <button
+                                  onClick={() => setDelConfirm({ id: p.id, type: "product", nama: p.nama })}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                  title="Hapus"
+                                >
+                                  <TrashIcon />
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

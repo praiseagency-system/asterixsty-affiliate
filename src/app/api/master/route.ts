@@ -28,7 +28,17 @@ export async function POST(req: Request) {
   if (type === "product") {
     const count = await prisma.product.count();
     const item = await prisma.product.create({
-      data: { no: count + 1, nama: String(data.nama ?? ""), hpp: Number(data.hpp ?? 0) },
+      data: {
+        no:           count + 1,
+        nama:         String(data.nama         ?? ""),
+        hpp:          Number(data.hpp          ?? 0),
+        skuId:        String(data.skuId        ?? ""),
+        productLink:  String(data.productLink  ?? ""),
+        productImage: String(data.productImage ?? ""),
+        category:     String(data.category     ?? ""),
+        platform:     String(data.platform     ?? ""),
+        activeStatus: String(data.activeStatus ?? "ACTIVE"),
+      },
     });
     return NextResponse.json(item, { status: 201 });
   }
@@ -61,7 +71,19 @@ export async function PATCH(req: Request) {
     if (hpp < 0) return NextResponse.json({ error: "HPP tidak boleh negatif" }, { status: 400 });
     const dup = await prisma.product.findFirst({ where: { nama: { equals: nama }, id: { not: id } } });
     if (dup) return NextResponse.json({ error: "Nama produk sudah ada" }, { status: 409 });
-    const item = await prisma.product.update({ where: { id }, data: { nama, hpp } });
+    const item = await prisma.product.update({
+      where: { id },
+      data: {
+        nama,
+        hpp,
+        skuId:        String(data.skuId        ?? ""),
+        productLink:  String(data.productLink  ?? ""),
+        productImage: String(data.productImage ?? ""),
+        category:     String(data.category     ?? ""),
+        platform:     String(data.platform     ?? ""),
+        activeStatus: String(data.activeStatus ?? "ACTIVE"),
+      },
+    });
     return NextResponse.json(item);
   }
   if (type === "specialist") {
