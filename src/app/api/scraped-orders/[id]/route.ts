@@ -69,26 +69,29 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   // ── Auto-create SampleDelivery + mark SYNCED ──────────────────────────────────
-  if (body.createSampleDelivery && updated.status === "CONFIRMED") {
+  // Always runs when status becomes CONFIRMED — Send Sample is the operational home.
+  if (updated.status === "CONFIRMED") {
     const target = updated.targetVideo || 0;
     await prisma.sampleDelivery.create({
       data: {
         workspaceId:       wsId,
         affiliateUsername: updated.tiktokUsername,
-        produk:            updated.productName || updated.productSku || "",
+        // Use the most descriptive name available for the "produk" field
+        produk:            updated.productName || updated.skuName || updated.productSku || "",
+        qtyProduk:         updated.quantity    || 1,
         totalVideoTarget:  target,
         videoCeklis:       JSON.stringify(
           Array.from({ length: target }, (_, i) => ({ label: `Video ${i + 1}`, done: false }))
         ),
         statusProgress:    "Belum Mulai",
         sampleCategory:    updated.kategoriPengiriman || "First Collaboration",
-        picName:           updated.picName,
-        catatan:           updated.catatan,
+        picName:           updated.picName  || "",
+        catatan:           updated.catatan  || "",
         scrapedOrderId:    updated.id,
       },
     }).catch((err) => console.error("[ScrapedOrders] SampleDelivery create error:", err));
 
-    // Advance status to SYNCED
+    // Advance to SYNCED — order is now tracked in Send Sample
     await prisma.scrapedOrder.update({
       where: { id: updated.id },
       data:  { status: "SYNCED" },

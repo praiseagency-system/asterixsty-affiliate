@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import ConfirmModal from "@/components/ConfirmModal";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -73,7 +74,6 @@ interface ConfirmPayload {
   mediaFocus:         string;
   visualTake:         string;
   kategoriAffiliate:  string;
-  createDelivery:     boolean;
 }
 
 const SAMPLE_CATEGORIES = [
@@ -168,7 +168,6 @@ function OrderModal({ order, onClose, onSubmit }: OrderModalProps) {
     mediaFocus:         order.mediaFocus         || order.affiliate_mediaFocus        || "",
     visualTake:         order.visualTake         || order.affiliate_visualTake        || "",
     kategoriAffiliate:  order.kategoriAffiliate  || order.affiliate_kategoriAffiliate || "",
-    createDelivery:     true,
   });
   const [loading, setLoading] = useState(false);
 
@@ -367,15 +366,13 @@ function OrderModal({ order, onClose, onSubmit }: OrderModalProps) {
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-indigo-600"
-                  checked={form.createDelivery}
-                  onChange={(e) => set("createDelivery", e.target.checked)}
-                />
-                Buat entri Send Sample secara otomatis
-              </label>
+              {/* Info: always creates SampleDelivery */}
+              <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg px-3 py-2">
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Konfirmasi akan membuat entri Send Sample secara otomatis dan mengalihkan ke halaman tracking.
+              </div>
             </div>
           </div>
         </div>
@@ -400,7 +397,7 @@ function OrderModal({ order, onClose, onSubmit }: OrderModalProps) {
             {loading ? (
               <>
                 <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                Menyimpan...
+                Membuat Send Sample...
               </>
             ) : (
               <>
@@ -423,6 +420,7 @@ type GroupTab = "pending" | "confirmed" | "all";
 
 export default function ScrapedOrdersPage() {
   const { wsFetch } = useWorkspace();
+  const router = useRouter();
 
   const [orders,     setOrders]     = useState<ScrapedOrder[]>([]);
   const [total,      setTotal]      = useState(0);
@@ -478,18 +476,14 @@ export default function ScrapedOrdersPage() {
           mediaFocus:           payload.mediaFocus,
           visualTake:           payload.visualTake,
           kategoriAffiliate:    payload.kategoriAffiliate,
-          createSampleDelivery: payload.createDelivery,
+          createSampleDelivery: true,    // always create Send Sample entry
         }),
       });
       const json = await res.json();
       if (json.success) {
-        showToast(
-          payload.createDelivery
-            ? "Order dikonfirmasi & entri Send Sample dibuat ✓"
-            : "Order dikonfirmasi ✓"
-        );
         setConfirming(null);
-        fetchOrders();
+        // Navigate to Send Sample — the new delivery is waiting there
+        router.push("/sample-delivery");
       } else {
         showToast(json.error || "Gagal menyimpan", "error");
       }
