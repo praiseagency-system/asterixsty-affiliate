@@ -2,36 +2,42 @@
  * POST /api/v1/samples/create
  *
  * Receives scraped order data from the Chrome extension.
+ * Supports two record formats:
+ *
+ *   v1 (flat, snake_case):
+ *     { order_id, order_status, order_date, creator_username, creator_name, ... }
+ *
+ *   v2 (nested, camelCase — Extension v2):
+ *     { sampleOrderId, orderStatus, createdAt,
+ *       creator: { username, name, phone, address },
+ *       product:  { skuId, productName, productImage },
+ *       shipping: { trackingNumber, shippingProvider },
+ *       platform }
+ *
  * For each record:
- *   1. Skip duplicate orders (order_id already in DB)
+ *   1. Skip duplicate orders (orderId already in DB)
  *   2. Auto-create DatabaseAffiliate (status = "Pending") if username is new
  *   3. Save ScrapedOrder with status = "pending_confirmation"
  *   4. Write ScrapeLog entry
  *
  * Request:
  *   Authorization: Bearer <license_key>
- *   Body: {
- *     scraped_at: string,
- *     records: [{
- *       order_id, order_status, order_date,
- *       creator_username, creator_name, creator_phone, creator_address,
- *       product_name, product_sku, product_image_url,
- *       shipping_provider, tracking_number, platform
- *     }]
- *   }
+ *   X-Workspace-ID: <workspaceId>   (optional — used by extension v2 for routing)
+ *   Body: { records: [...], scraped_at?: string, scrapedAt?: string }
  *
  * Response 200:
  *   { success, total, records_created, duplicates_skipped, affiliates_new, affiliates_pending, errors }
  */
 
-import { NextResponse }    from "next/server";
-import { requireLicense }  from "@/lib/license-auth";
-import { prisma }          from "@/lib/prisma";
+import { NextResponse }       from "next/server";
+import { requireLicense }     from "@/lib/license-auth";
+import { prisma }             from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
-interface ScrapeRecord {
+// ── Normalised flat record (internal representation) ─────────────────────────
+interface FlatRecord {
   order_id?:          string;
   order_status?:      string;
   order_date?:        string;
@@ -47,25 +53,77 @@ interface ScrapeRecord {
   platform?:          string;
 }
 
+// ── Extension v2 nested record shape ─────────────────────────────────────────
+interface NestedRecord {
+  sampleOrderId?: string;
+  orderStatus?:   string;
+  createdAt?:     string;
+  platform?:      string;
+  creator?: {
+    username?:  string;
+    name?:      string;
+    phone?:     string;
+    address?:   string;
+    creatorId?: string;
+  };
+  product?: {
+    skuId?:        string;
+    productName?:  string;
+    productImage?: string;
+  };
+  shipping?: {
+    trackingNumber?:   string;
+    shippingProvider?: string;
+  };
+}
+
+/** Normalise either v1 flat or v2 nested record into a FlatRecord */
+function normaliseRecord(raw: Record<string, unknown>): FlatRecord {
+  // Detect v2 by presence of camelCase fields
+  if ("sampleOrderId" in raw || "creator" in raw) {
+    const r = raw as NestedRecord;
+    return {
+      order_id:          r.sampleOrderId,
+      order_status:      r.orderStatus,
+      order_date:        r.createdAt,
+      creator_username:  r.creator?.username,
+      creator_name:      r.creator?.name,
+      creator_phone:     r.creator?.phone,
+      creator_address:   r.creator?.address,
+      product_name:      r.product?.productName,
+      product_sku:       r.product?.skuId,
+      product_image_url: r.product?.productImage,
+      shipping_provider: r.shipping?.shippingProvider,
+      tracking_number:   r.shipping?.trackingNumber,
+      platform:          r.platform ?? "tokopedia",
+    };
+  }
+  // v1 flat — pass through
+  return raw as FlatRecord;
+}
+
 export async function POST(req: Request) {
   const ws = await requireLicense(req);
   if (!ws.ok) {
     return NextResponse.json({ error: ws.error }, { status: ws.status });
   }
 
-  let body: { records?: ScrapeRecord[]; scraped_at?: string };
+  let body: { records?: Record<string, unknown>[]; scraped_at?: string; scrapedAt?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { records } = body;
-  if (!Array.isArray(records) || records.length === 0) {
+  const rawRecords = body.records;
+  if (!Array.isArray(rawRecords) || rawRecords.length === 0) {
     return NextResponse.json({ error: "records array is required" }, { status: 400 });
   }
 
-  console.log(`[Samples] Processing ${records.length} records for workspace ${ws.name}`);
+  // Normalise v1 / v2 records into a uniform flat shape
+  const records: FlatRecord[] = rawRecords.map(normaliseRecord);
+
+  console.log(`[Samples] Processing ${records.length} records for workspace ${ws.name} (v${rawRecords[0] && "sampleOrderId" in rawRecords[0] ? "2" : "1"})`);
 
   const results = {
     total:               records.length,
