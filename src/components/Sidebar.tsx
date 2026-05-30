@@ -64,6 +64,7 @@ const ICONS = {
   colorSwatch:  ["M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"] as const,
   externalLink: "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14",
   clipboard:    ["M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"] as const,
+  inbox:        ["M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"] as const,
 } as const;
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -96,7 +97,8 @@ const GROUPS: GroupConfig[] = [
     children: [
       { href: "/listing",         labelKey: "nav.affiliateScouting", iconKey: "search",       permission: PERMISSIONS.VIEW_AFFILIATE  },
       { href: "/database",        labelKey: "nav.databaseAffiliate", iconKey: "folder",       permission: PERMISSIONS.VIEW_AFFILIATE  },
-      { href: "/sample-delivery", labelKey: "nav.sendSample",        iconKey: "cube",         permission: PERMISSIONS.VIEW_SAMPLE     },
+      { href: "/sample-delivery",  labelKey: "nav.sendSample",        iconKey: "cube",         permission: PERMISSIONS.VIEW_SAMPLE     },
+      { href: "/scraped-orders",  labelKey: "nav.scrapedOrders",     iconKey: "inbox",        permission: PERMISSIONS.VIEW_SAMPLE     },
       { href: "/broadcast",       labelKey: "nav.broadcastEngine",   iconKey: "speakerphone", permission: PERMISSIONS.VIEW_BROADCAST  },
     ],
   },

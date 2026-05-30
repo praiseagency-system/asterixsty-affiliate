@@ -59,7 +59,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (body.createSampleDelivery && updated.status === "active") {
     await prisma.sampleDelivery.create({
       data: {
-        workspaceId:      ws.id,
+        workspaceId:       ws.id,
         affiliateUsername: updated.tiktokUsername,
         produk:            updated.productName,
         totalVideoTarget:  updated.targetVideo,
@@ -73,6 +73,7 @@ export async function PATCH(req: Request, { params }: Params) {
           }))
         ),
         statusProgress: "Belum Mulai",
+        scrapedOrderId: updated.id,   // link back to origin scraped order
       },
     }).catch((err) => console.error("[Samples] SampleDelivery create error:", err));
   }

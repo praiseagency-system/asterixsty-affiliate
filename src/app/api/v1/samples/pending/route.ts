@@ -1,18 +1,15 @@
 /**
  * GET /api/v1/samples/pending
  *
- * Returns all ScrapedOrders with status = "pending_confirmation"
- * for the authenticated workspace, joined with affiliate data.
- *
- * Used by the Chrome extension (or dashboard) to show PIC what
- * needs confirmation.
+ * Returns ScrapedOrders for the authenticated workspace.
+ * Supports status filtering so the inbox can show all tabs.
  *
  * Request:
  *   Authorization: Bearer <license_key>
- *   ?page=1&limit=50&platform=tokopedia
+ *   ?page=1&limit=50&platform=tiktok&status=pending_confirmation
  *
  * Response 200:
- *   { success, data: ScrapedOrder[], total }
+ *   { success, data: EnrichedScrapedOrder[], total }
  */
 
 import { NextResponse }   from "next/server";
@@ -31,12 +28,16 @@ export async function GET(req: Request) {
   const page     = Math.max(1, parseInt(url.searchParams.get("page")    ?? "1"));
   const limit    = Math.min(100, parseInt(url.searchParams.get("limit") ?? "50"));
   const platform = url.searchParams.get("platform") ?? "";
+  // Default to pending_confirmation; pass "all" to get everything
+  const statusParam = url.searchParams.get("status") ?? "pending_confirmation";
 
-  const where = {
-    workspaceId: ws.id,
-    status:      "pending_confirmation",
-    ...(platform ? { platform } : {}),
-  };
+  const where: Record<string, unknown> = { workspaceId: ws.id };
+  if (statusParam !== "all") {
+    where.status = statusParam;
+  }
+  if (platform) {
+    where.platform = platform;
+  }
 
   const [total, orders] = await Promise.all([
     prisma.scrapedOrder.count({ where }),
@@ -53,15 +54,16 @@ export async function GET(req: Request) {
   const affiliates = usernames.length
     ? await prisma.databaseAffiliate.findMany({
         where:  { workspaceId: ws.id, tiktokUsername: { in: usernames }, deletedAt: null },
-        select: { tiktokUsername: true, status: true, noWhatsapp: true },
+        select: { tiktokUsername: true, status: true, noWhatsapp: true, namaAffiliator: true },
       })
     : [];
   const affiliateMap = Object.fromEntries(affiliates.map((a) => [a.tiktokUsername, a]));
 
   const data = orders.map((o) => ({
     ...o,
-    affiliate_status: affiliateMap[o.tiktokUsername]?.status ?? null,
-    affiliate_phone:  affiliateMap[o.tiktokUsername]?.noWhatsapp ?? o.creatorPhone,
+    affiliate_status: affiliateMap[o.tiktokUsername]?.status       ?? null,
+    affiliate_phone:  affiliateMap[o.tiktokUsername]?.noWhatsapp   ?? o.creatorPhone,
+    affiliate_name:   affiliateMap[o.tiktokUsername]?.namaAffiliator ?? o.creatorName,
   }));
 
   return NextResponse.json({ success: true, data, total });
