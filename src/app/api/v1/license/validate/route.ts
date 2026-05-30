@@ -1,54 +1,106 @@
 /**
  * POST /api/v1/license/validate
  *
- * Chrome extension calls this on startup to verify its license key
- * and receive workspace metadata.
+ * Canonical license key validation endpoint.
+ * Used by Chrome Extension v2 (and any future clients).
  *
- * Request:
- *   Authorization: Bearer <license_key>
- *   — or —
- *   Body: { license_key: string }
+ * Request body: { licenseKey: string }
+ *   — OR —
+ * Authorization: Bearer <license_key>
  *
  * Response 200:
- *   { success, workspace_id, brand_name, expiry_date, permissions }
+ *   { success, workspaceId, workspaceName, token, permissions: { sampleSync } }
+ *
+ * Response 400 / 401 / 500:
+ *   { success: false, error: string }
  */
 
-import { NextResponse }      from "next/server";
-import { requireLicense }    from "@/lib/license-auth";
-import { prisma }            from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { prisma }       from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+// ── CORS helper ────────────────────────────────────────────────────────────────
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Workspace-ID",
+};
+
+// ── OPTIONS — CORS preflight ───────────────────────────────────────────────────
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
+// ── POST — validate license key ────────────────────────────────────────────────
 export async function POST(req: Request) {
-  // Support both Bearer header and body.license_key
-  let authReq = req;
-  const body  = await req.json().catch(() => ({})) as Record<string, string>;
+  // ── 1. Extract license key from body { licenseKey } or Bearer header ─────────
+  let licenseKey = "";
 
-  if (!req.headers.get("authorization") && body.license_key) {
-    // Inject a synthetic Authorization header so requireLicense can parse it
-    const synth = new Request(req.url, {
-      method:  req.method,
-      headers: { ...Object.fromEntries(req.headers), authorization: `Bearer ${body.license_key}` },
+  const authHeader = req.headers.get("authorization") ?? "";
+  if (authHeader.startsWith("Bearer ")) {
+    licenseKey = authHeader.slice(7).trim();
+  }
+
+  if (!licenseKey) {
+    try {
+      const body = await req.json() as Record<string, unknown>;
+      // Accept both camelCase (extension v2) and snake_case (legacy)
+      licenseKey = String(body.licenseKey ?? body.license_key ?? "").trim();
+    } catch {
+      // body not parseable — continue with empty licenseKey
+    }
+  }
+
+  console.log(`[license/validate] incoming key: "${licenseKey}" (len=${licenseKey.length})`);
+
+  if (!licenseKey) {
+    console.warn("[license/validate] rejected: no key provided");
+    return NextResponse.json(
+      { success: false, error: "licenseKey is required" },
+      { status: 400, headers: CORS_HEADERS },
+    );
+  }
+
+  // ── 2. Look up workspace ──────────────────────────────────────────────────────
+  let workspace: { id: number; name: string; agency: { name: string } | null } | null = null;
+  try {
+    workspace = await prisma.workspace.findFirst({
+      where:  { licenseKey },
+      select: {
+        id:     true,
+        name:   true,
+        agency: { select: { name: true } },
+      },
     });
-    authReq = synth;
+  } catch (err) {
+    console.error("[license/validate] DB error:", err);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500, headers: CORS_HEADERS },
+    );
   }
 
-  const ws = await requireLicense(authReq);
-  if (!ws.ok) {
-    return NextResponse.json({ error: ws.error }, { status: ws.status });
+  if (!workspace) {
+    console.warn(`[license/validate] rejected: no workspace found for key "${licenseKey}"`);
+    return NextResponse.json(
+      { success: false, error: "License key tidak valid atau workspace tidak ditemukan" },
+      { status: 401, headers: CORS_HEADERS },
+    );
   }
 
-  // Pull workspace + agency brand name
-  const workspace = await prisma.workspace.findUnique({
-    where:   { id: ws.id },
-    include: { agency: { select: { name: true } } },
-  });
+  const workspaceName = workspace.agency?.name ?? workspace.name;
 
-  return NextResponse.json({
-    success:      true,
-    workspace_id: ws.name,           // slug-style identifier
-    brand_name:   workspace?.agency?.name ?? ws.name,
-    expiry_date:  "2027-12-31",
-    permissions:  ["scrape", "sync"],
-  });
+  console.log(`[license/validate] OK — workspace ${workspace.id} "${workspaceName}"`);
+
+  return NextResponse.json(
+    {
+      success:       true,
+      workspaceId:   workspace.id,
+      workspaceName,
+      token:         licenseKey,           // extension stores this as its Bearer token
+      permissions:   { sampleSync: true },
+    },
+    { headers: CORS_HEADERS },
+  );
 }
