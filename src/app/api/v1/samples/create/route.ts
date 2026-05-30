@@ -164,7 +164,8 @@ export async function POST(req: Request) {
   const records: FlatRecord[] = rawRecords.map(normaliseRecord);
 
   const version = rawRecords[0] && "sampleOrderId" in rawRecords[0] ? "2" : "1";
-  console.log(`[Samples] Processing ${records.length} records for workspace ${ws.name} (v${version})`);
+  console.log(`[Samples] Processing ${records.length} records — workspace: ${ws.name} (id:${ws.id}) v${version}`);
+  console.log(`[Samples] Dedup scope: workspaceId=${ws.id} (backend is source of truth)`);
 
   const results = {
     total:               records.length,
@@ -182,13 +183,16 @@ export async function POST(req: Request) {
     }
 
     try {
-      // ── 1. Duplicate check ──────────────────────────────────────────────────
-      const existing = await prisma.scrapedOrder.findUnique({
-        where:  { orderId: record.order_id },
+      // ── 1. Duplicate check — scoped to this workspace ──────────────────────
+      // Backend is the SOLE source of truth for dedup.
+      // The extension sends ALL records; we decide here what's new vs duplicate.
+      const existing = await prisma.scrapedOrder.findFirst({
+        where:  { workspaceId: ws.id, orderId: record.order_id },
         select: { id: true },
       });
       if (existing) {
         results.duplicates_skipped++;
+        console.log(`  [Samples] DUPLICATE: ${record.order_id}`);
         continue;
       }
 
@@ -265,6 +269,7 @@ export async function POST(req: Request) {
       });
 
       results.records_created++;
+      console.log(`  [Samples] CREATED: ${record.order_id}  @${username || '-'}  platform:${record.platform ?? '?'}`);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

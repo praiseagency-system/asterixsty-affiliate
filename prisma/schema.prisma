@@ -747,7 +747,9 @@ model ScrapedOrder {
   creatorProfileLink  String    @default("")
 
   // Order data from scraper
-  orderId             String    @unique
+  // Unique per workspace — two different workspaces may theoretically track the same
+  // platform order ID (e.g. different seller accounts), so we scope uniqueness to workspace.
+  orderId             String
   orderStatus         String    @default("")
   orderDate           String    @default("")
   quantity            Int       @default(1)
@@ -783,6 +785,8 @@ model ScrapedOrder {
 
   workspace           Workspace @relation(fields: [workspaceId], references: [id])
 
+  // Dedup key: one orderId per workspace (backend is source of truth for duplicates)
+  @@unique([workspaceId, orderId])
   @@index([workspaceId, status])
   @@index([tiktokUsername])
 }
