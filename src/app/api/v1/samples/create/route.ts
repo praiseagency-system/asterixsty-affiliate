@@ -83,6 +83,8 @@ interface FlatRecord {
   platform?:             string;
   campaign_id?:          string;
   campaign_name?:        string;
+  // Resolution engine signal — set by extension when detail enrichment exhausted retries
+  _resolve_failed?:      boolean;
 }
 
 // ── Extension v2 nested record shape ─────────────────────────────────────────
@@ -148,6 +150,7 @@ function normaliseRecord(raw: Record<string, unknown>): FlatRecord {
   if ("sampleOrderId" in raw || "creator" in raw) {
     const r = raw as NestedRecord;
     return {
+      _resolve_failed:     (raw as Record<string,unknown>)._resolveFailed === true,
       order_id:            r.sampleOrderId,
       order_status:        r.orderStatus,
       order_date:          r.createdAt,
@@ -218,45 +221,100 @@ export async function POST(req: Request) {
     }
 
     try {
+      // ── 0. Resolution-failed signal from extension ──────────────────────────
+      // When the extension exhausted retries for detail enrichment, it emits the
+      // record with _resolveFailed=true.  Just mark the DB order as FAILED.
+      if (record._resolve_failed) {
+        const failedOrder = await prisma.scrapedOrder.findFirst({
+          where:  { workspaceId: ws.id, orderId: record.order_id },
+          select: { id: true, status: true, resolveAttempts: true },
+        });
+        if (failedOrder) {
+          const PRE_CONFIRM = ["SCRAPED", "RESOLVING", "FAILED"];
+          if (PRE_CONFIRM.includes(failedOrder.status)) {
+            await prisma.scrapedOrder.update({
+              where: { id: failedOrder.id },
+              data:  { status: "FAILED", resolveAttempts: (failedOrder.resolveAttempts || 0) + 1, resolveError: "Max retries exceeded" },
+            });
+            console.log(`  [Samples] FAILED: ${record.order_id} (resolution engine gave up)`);
+          }
+        }
+        results.duplicates_skipped++;
+        continue;
+      }
+
       // ── 1. Workspace-scoped duplicate check ────────────────────────────────
       const existing = await prisma.scrapedOrder.findFirst({
         where:  { workspaceId: ws.id, orderId: record.order_id },
-        select: { id: true, trackingNumber: true, shipmentStatus: true },
+        select: {
+          id: true, status: true,
+          trackingNumber: true, shipmentStatus: true, orderStatus: true,
+          tiktokUsername: true, creatorName: true, creatorId: true, creatorProfileLink: true,
+          productSku: true, productName: true, skuName: true, productImageUrl: true,
+          shippingProvider: true,
+        },
       });
 
       if (existing) {
-        // ── UPSERT: update tracking / shipment fields when we have new data ──
-        const incomingTracking  = record.tracking_number?.trim()    ?? "";
-        const incomingProvider  = record.shipping_provider?.trim()  ?? "";
-        const incomingStatus    = mapShipmentStatus(record.shipment_status);
-        const incomingShippedAt = record.shipped_at          ?? "";
-        const incomingDelivered = record.delivered_at        ?? "";
-        const incomingEstimate  = record.estimated_delivery  ?? "";
-        const incomingOrderStatus = record.order_status      ?? "";
+        // ── UPSERT: update any field where incoming data fills a gap ──────────
+        const incomingUsername   = (record.creator_username ?? "").replace("@", "").trim();
+        const incomingTracking   = record.tracking_number?.trim()   ?? "";
+        const incomingProvider   = record.shipping_provider?.trim() ?? "";
+        const incomingStatus     = mapShipmentStatus(record.shipment_status);
+        const incomingShippedAt  = record.shipped_at         ?? "";
+        const incomingDelivered  = record.delivered_at       ?? "";
+        const incomingEstimate   = record.estimated_delivery ?? "";
+        const incomingOrderSt    = record.order_status       ?? "";
+        const incomingCreatorName = record.creator_name      ?? "";
+        const incomingCreatorId   = record.creator_id        ?? "";
+        const incomingProfileLink = record.creator_profile_link ?? "";
+        const incomingProductSku  = record.product_sku       ?? "";
+        const incomingProductName = record.product_name      ?? "";
+        const incomingSkuName     = record.sku_name          ?? "";
+        const incomingImgUrl      = record.product_image_url ?? "";
 
-        // Only write if we're bringing new information
-        const hasNewTracking = incomingTracking  && !existing.trackingNumber;
-        const hasNewStatus   = incomingStatus    && incomingStatus !== existing.shipmentStatus;
-        const hasAnyUpdate   = hasNewTracking || hasNewStatus || incomingShippedAt || incomingDelivered || incomingEstimate;
+        const patch: Record<string, unknown> = {};
+        if (incomingUsername  && !existing.tiktokUsername)   patch.tiktokUsername     = incomingUsername;
+        if (incomingCreatorName && !existing.creatorName)    patch.creatorName        = incomingCreatorName;
+        if (incomingCreatorId   && !existing.creatorId)      patch.creatorId          = incomingCreatorId;
+        if (incomingProfileLink && !existing.creatorProfileLink) patch.creatorProfileLink = incomingProfileLink;
+        if (incomingProductSku  && !existing.productSku)     patch.productSku         = incomingProductSku;
+        if (incomingProductName && !existing.productName)    patch.productName        = incomingProductName;
+        if (incomingSkuName     && !existing.skuName)        patch.skuName            = incomingSkuName;
+        if (incomingImgUrl      && !existing.productImageUrl) patch.productImageUrl   = incomingImgUrl;
+        if (incomingTracking    && !existing.trackingNumber) patch.trackingNumber     = incomingTracking;
+        if (incomingProvider    && !existing.shippingProvider) patch.shippingProvider = incomingProvider;
+        if (incomingStatus      && incomingStatus !== existing.shipmentStatus) patch.shipmentStatus = incomingStatus;
+        if (incomingShippedAt)  patch.shippedAt         = incomingShippedAt;
+        if (incomingDelivered)  patch.deliveredAt        = incomingDelivered;
+        if (incomingEstimate)   patch.estimatedDelivery  = incomingEstimate;
+        if (incomingOrderSt && !existing.orderStatus)    patch.orderStatus    = incomingOrderSt;
 
-        if (hasAnyUpdate) {
-          await prisma.scrapedOrder.update({
-            where: { id: existing.id },
-            data: {
-              ...(incomingTracking   && { trackingNumber:    incomingTracking }),
-              ...(incomingProvider   && { shippingProvider:  incomingProvider }),
-              ...(incomingStatus     && { shipmentStatus:    incomingStatus }),
-              ...(incomingShippedAt  && { shippedAt:         incomingShippedAt }),
-              ...(incomingDelivered  && { deliveredAt:       incomingDelivered }),
-              ...(incomingEstimate   && { estimatedDelivery: incomingEstimate }),
-              ...(incomingOrderStatus && { orderStatus:      incomingOrderStatus }),
-            },
-          });
+        // Status upgrade: if record gains creator + product + shipping → READY_CONFIRM
+        const mergedUsername  = (patch.tiktokUsername  as string) || existing.tiktokUsername;
+        const mergedSku       = (patch.productSku      as string) || existing.productSku;
+        const mergedProduct   = (patch.productName     as string) || existing.productName;
+        const mergedTracking  = (patch.trackingNumber  as string) || existing.trackingNumber;
+        const mergedSStatus   = (patch.shipmentStatus  as string) || existing.shipmentStatus;
+        const mergedOrderSt   = (patch.orderStatus     as string) || existing.orderStatus;
+        const isNowRich = !!mergedUsername && !!(mergedSku || mergedProduct) &&
+                          !!(mergedTracking || mergedSStatus || mergedOrderSt);
+        const PRE_CONFIRM_STATUSES = ["SCRAPED", "RESOLVING", "FAILED", "pending_confirmation"];
+        if (isNowRich && PRE_CONFIRM_STATUSES.includes(existing.status)) {
+          patch.status = "READY_CONFIRM";
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await prisma.scrapedOrder.update({ where: { id: existing.id }, data: patch });
           results.records_updated++;
-          console.log(`  [Samples] UPDATED: ${record.order_id}  status:${incomingStatus || '-'}  tracking:${incomingTracking || '-'}`);
+          console.log(
+            `  [Samples] UPDATED: ${record.order_id}` +
+            `  fields:${Object.keys(patch).join(",")}` +
+            (patch.status ? `  →status:${patch.status}` : "")
+          );
         } else {
           results.duplicates_skipped++;
-          console.log(`  [Samples] DUPLICATE: ${record.order_id}`);
+          console.log(`  [Samples] DUPLICATE (no new data): ${record.order_id}`);
         }
         continue;
       }
@@ -302,6 +360,18 @@ export async function POST(req: Request) {
 
       // ── 3. Create ScrapedOrder ──────────────────────────────────────────────
       const internalShipmentStatus = mapShipmentStatus(record.shipment_status);
+      const newSku      = record.product_sku     ?? "";
+      const newProduct  = record.product_name    ?? "";
+      const newTracking = record.tracking_number ?? "";
+
+      // Determine initial status:
+      //   READY_CONFIRM when creator + product + any shipping data all present
+      //   SCRAPED       otherwise (detail enrichment will upgrade it)
+      const initialIsRich =
+        !!username &&
+        !!(newSku || newProduct) &&
+        !!(newTracking || internalShipmentStatus || record.order_status);
+      const initialStatus = initialIsRich ? "READY_CONFIRM" : "SCRAPED";
 
       await prisma.scrapedOrder.create({
         data: {
@@ -319,14 +389,14 @@ export async function POST(req: Request) {
           orderDate:          record.order_date           ?? "",
           quantity:           record.quantity             ?? 1,
           // Product
-          productName:        record.product_name         ?? "",
-          productSku:         record.product_sku          ?? "",
+          productName:        newProduct,
+          productSku:         newSku,
           skuName:            record.sku_name             ?? "",
           productImageUrl:    record.product_image_url    ?? "",
           productLink:        record.product_link         ?? "",
           // Shipping
           shippingProvider:   record.shipping_provider    ?? "",
-          trackingNumber:     record.tracking_number      ?? "",
+          trackingNumber:     newTracking,
           // Shipment tracking
           shipmentStatus:     internalShipmentStatus,
           shippedAt:          record.shipped_at           ?? "",
@@ -336,12 +406,17 @@ export async function POST(req: Request) {
           platform:           record.platform             ?? "tokopedia",
           campaignId:         record.campaign_id          ?? "",
           campaignName:       record.campaign_name        ?? "",
-          status:             "pending_confirmation",
+          // Status pipeline: SCRAPED → READY_CONFIRM → CONFIRMED → SYNCED
+          status:             initialStatus,
         },
       });
 
       results.records_created++;
-      console.log(`  [Samples] CREATED: ${record.order_id}  @${username || '-'}  platform:${record.platform ?? '?'}${internalShipmentStatus ? `  shipment:${internalShipmentStatus}` : ''}`);
+      console.log(
+        `  [Samples] CREATED: ${record.order_id}  @${username || '-'}` +
+        `  status:${initialStatus}  platform:${record.platform ?? '?'}` +
+        (internalShipmentStatus ? `  shipment:${internalShipmentStatus}` : "")
+      );
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

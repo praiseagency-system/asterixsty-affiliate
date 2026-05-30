@@ -785,9 +785,22 @@ model ScrapedOrder {
   picName             String    @default("")
   catatan             String    @default("")
 
-  // Status lifecycle
-  // pending_confirmation → active → completed | cancelled
-  status              String    @default("pending_confirmation")
+  // Affiliate profile fields (carried from DatabaseAffiliate or set at PIC confirmation)
+  mediaFocus          String    @default("")   // media promosi focus
+  visualTake          String    @default("")   // jenis visual take
+  kategoriAffiliate   String    @default("")   // kategori affiliate
+
+  // Status lifecycle:
+  //   SCRAPED        → captured from list scan, no detail yet
+  //   RESOLVING      → detail enrichment in progress
+  //   READY_CONFIRM  → detail resolved, awaiting PIC confirmation
+  //   CONFIRMED      → PIC confirmed; ready to create SampleDelivery
+  //   SYNCED         → SampleDelivery created and linked
+  //   FAILED         → detail enrichment failed after max retries
+  //   (legacy: pending_confirmation | active | cancelled — kept for backwards compat)
+  status              String    @default("SCRAPED")
+  resolveAttempts     Int       @default(0)   // detail enrichment attempt count
+  resolveError        String    @default("")  // last enrichment error message
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

@@ -1,17 +1,20 @@
 /**
  * PATCH /api/scraped-orders/:id
  *
- * Webapp-authenticated endpoint to confirm or cancel a scraped order.
- * Uses resolveWorkspaceId — same pattern as other webapp routes.
+ * Confirms or cancels a scraped order (webapp-authenticated).
  *
- * Body: {
- *   status?:               "active" | "cancelled",
- *   kategoriPengiriman?:   string,
- *   targetVideo?:          number,
- *   picName?:              string,
- *   catatan?:              string,
- *   createSampleDelivery?: boolean  — auto-create SampleDelivery entry
- * }
+ * Body:
+ *   status?:               "CONFIRMED" | "cancelled"
+ *   kategoriPengiriman?:   string
+ *   targetVideo?:          number
+ *   picName?:              string
+ *   catatan?:              string
+ *   mediaFocus?:           string
+ *   visualTake?:           string
+ *   kategoriAffiliate?:    string
+ *   createSampleDelivery?: boolean   — auto-create SampleDelivery and set status to SYNCED
+ *
+ * Legacy: status "active" is accepted and mapped to "CONFIRMED".
  */
 
 import { NextResponse }        from "next/server";
@@ -23,8 +26,8 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
-  const wsId  = resolveWorkspaceId(req) ?? 1;
-  const { id } = await params;
+  const wsId    = resolveWorkspaceId(req) ?? 1;
+  const { id }  = await params;
 
   const order = await prisma.scrapedOrder.findUnique({ where: { id: Number(id) } });
   if (!order || order.workspaceId !== wsId) {
@@ -33,39 +36,64 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
 
+  // Map legacy "active" → "CONFIRMED"
+  if (body.status === "active") body.status = "CONFIRMED";
+
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
   if ("status"             in body) updateData.status             = String(body.status);
   if ("kategoriPengiriman" in body) updateData.kategoriPengiriman = String(body.kategoriPengiriman ?? "");
   if ("targetVideo"        in body) updateData.targetVideo        = Number(body.targetVideo) || 0;
   if ("picName"            in body) updateData.picName            = String(body.picName ?? "");
   if ("catatan"            in body) updateData.catatan            = String(body.catatan ?? "");
+  if ("mediaFocus"         in body) updateData.mediaFocus         = String(body.mediaFocus ?? "");
+  if ("visualTake"         in body) updateData.visualTake         = String(body.visualTake ?? "");
+  if ("kategoriAffiliate"  in body) updateData.kategoriAffiliate  = String(body.kategoriAffiliate ?? "");
 
   const updated = await prisma.scrapedOrder.update({
     where: { id: Number(id) },
     data:  updateData,
   });
 
-  // Auto-create SampleDelivery when status moves to "active"
-  if (body.createSampleDelivery && updated.status === "active") {
+  // ── When confirmed: update DatabaseAffiliate profile fields ──────────────────
+  if (updated.status === "CONFIRMED" && updated.tiktokUsername) {
+    const affPatch: Record<string, string> = {};
+    if (updated.mediaFocus)        affPatch.mediaPromosiFocus  = updated.mediaFocus;
+    if (updated.visualTake)        affPatch.visualTake         = updated.visualTake;
+    if (updated.kategoriAffiliate) affPatch.kategoriAffiliate  = updated.kategoriAffiliate;
+    if (Object.keys(affPatch).length > 0) {
+      await prisma.databaseAffiliate.updateMany({
+        where: { workspaceId: wsId, tiktokUsername: updated.tiktokUsername, deletedAt: null },
+        data:  affPatch,
+      }).catch((err) => console.error("[ScrapedOrders] Affiliate profile update error:", err));
+    }
+  }
+
+  // ── Auto-create SampleDelivery + mark SYNCED ──────────────────────────────────
+  if (body.createSampleDelivery && updated.status === "CONFIRMED") {
+    const target = updated.targetVideo || 0;
     await prisma.sampleDelivery.create({
       data: {
         workspaceId:       wsId,
         affiliateUsername: updated.tiktokUsername,
-        produk:            updated.productName,
-        totalVideoTarget:  updated.targetVideo,
+        produk:            updated.productName || updated.productSku || "",
+        totalVideoTarget:  target,
+        videoCeklis:       JSON.stringify(
+          Array.from({ length: target }, (_, i) => ({ label: `Video ${i + 1}`, done: false }))
+        ),
+        statusProgress:    "Belum Mulai",
         sampleCategory:    updated.kategoriPengiriman || "First Collaboration",
         picName:           updated.picName,
         catatan:           updated.catatan,
-        videoCeklis:       JSON.stringify(
-          Array.from({ length: updated.targetVideo }, (_, i) => ({
-            label: `Video ${i + 1}`,
-            done:  false,
-          }))
-        ),
-        statusProgress: "Belum Mulai",
-        scrapedOrderId: updated.id,
+        scrapedOrderId:    updated.id,
       },
     }).catch((err) => console.error("[ScrapedOrders] SampleDelivery create error:", err));
+
+    // Advance status to SYNCED
+    await prisma.scrapedOrder.update({
+      where: { id: updated.id },
+      data:  { status: "SYNCED" },
+    }).catch(() => {});
+    updated.status = "SYNCED";
   }
 
   return NextResponse.json({ success: true, data: updated });
