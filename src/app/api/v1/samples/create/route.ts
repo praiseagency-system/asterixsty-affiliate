@@ -7,11 +7,12 @@
  *   v1 (flat, snake_case):
  *     { order_id, order_status, order_date, creator_username, creator_name, ... }
  *
- *   v2 (nested, camelCase — Extension v2):
- *     { sampleOrderId, orderStatus, createdAt,
- *       creator: { username, name, phone, address },
- *       product:  { skuId, productName, productImage },
+ *   v2 (nested, camelCase — Extension v2.1):
+ *     { sampleOrderId, orderStatus, createdAt, quantity,
+ *       creator: { username, name, phone, address, creatorId, profileLink },
+ *       product: { skuId, skuName, productName, productImage, productLink },
  *       shipping: { trackingNumber, shippingProvider },
+ *       campaign: { campaignId, campaignName },
  *       platform }
  *
  * For each record:
@@ -50,19 +51,30 @@ export async function OPTIONS() {
 
 // ── Normalised flat record (internal representation) ─────────────────────────
 interface FlatRecord {
-  order_id?:          string;
-  order_status?:      string;
-  order_date?:        string;
-  creator_username?:  string;
-  creator_name?:      string;
-  creator_phone?:     string;
-  creator_address?:   string;
-  product_name?:      string;
-  product_sku?:       string;
-  product_image_url?: string;
-  shipping_provider?: string;
-  tracking_number?:   string;
-  platform?:          string;
+  order_id?:           string;
+  order_status?:       string;
+  order_date?:         string;
+  quantity?:           number;
+  // Creator
+  creator_username?:   string;
+  creator_name?:       string;
+  creator_phone?:      string;
+  creator_address?:    string;
+  creator_id?:         string;
+  creator_profile_link?: string;
+  // Product
+  product_name?:       string;
+  product_sku?:        string;
+  sku_name?:           string;
+  product_image_url?:  string;
+  product_link?:       string;
+  // Shipping
+  shipping_provider?:  string;
+  tracking_number?:    string;
+  // Campaign / platform
+  platform?:           string;
+  campaign_id?:        string;
+  campaign_name?:      string;
 }
 
 // ── Extension v2 nested record shape ─────────────────────────────────────────
@@ -70,44 +82,60 @@ interface NestedRecord {
   sampleOrderId?: string;
   orderStatus?:   string;
   createdAt?:     string;
+  updatedAt?:     string;
+  quantity?:      number;
   platform?:      string;
   creator?: {
-    username?:  string;
-    name?:      string;
-    phone?:     string;
-    address?:   string;
-    creatorId?: string;
+    username?:    string;
+    name?:        string;
+    phone?:       string;
+    address?:     string;
+    creatorId?:   string;
+    profileLink?: string;
   };
   product?: {
     skuId?:        string;
+    skuName?:      string;
     productName?:  string;
     productImage?: string;
+    productLink?:  string;
   };
   shipping?: {
     trackingNumber?:   string;
     shippingProvider?: string;
   };
+  campaign?: {
+    campaignId?:   string;
+    campaignName?: string;
+  };
 }
 
 /** Normalise either v1 flat or v2 nested record into a FlatRecord */
 function normaliseRecord(raw: Record<string, unknown>): FlatRecord {
-  // Detect v2 by presence of camelCase fields
+  // Detect v2 by presence of camelCase / nested fields
   if ("sampleOrderId" in raw || "creator" in raw) {
     const r = raw as NestedRecord;
     return {
-      order_id:          r.sampleOrderId,
-      order_status:      r.orderStatus,
-      order_date:        r.createdAt,
-      creator_username:  r.creator?.username,
-      creator_name:      r.creator?.name,
-      creator_phone:     r.creator?.phone,
-      creator_address:   r.creator?.address,
-      product_name:      r.product?.productName,
-      product_sku:       r.product?.skuId,
-      product_image_url: r.product?.productImage,
-      shipping_provider: r.shipping?.shippingProvider,
-      tracking_number:   r.shipping?.trackingNumber,
-      platform:          r.platform ?? "tokopedia",
+      order_id:            r.sampleOrderId,
+      order_status:        r.orderStatus,
+      order_date:          r.createdAt,
+      quantity:            r.quantity,
+      creator_username:    r.creator?.username,
+      creator_name:        r.creator?.name,
+      creator_phone:       r.creator?.phone,
+      creator_address:     r.creator?.address,
+      creator_id:          r.creator?.creatorId,
+      creator_profile_link: r.creator?.profileLink,
+      product_name:        r.product?.productName,
+      product_sku:         r.product?.skuId,
+      sku_name:            r.product?.skuName,
+      product_image_url:   r.product?.productImage,
+      product_link:        r.product?.productLink,
+      shipping_provider:   r.shipping?.shippingProvider,
+      tracking_number:     r.shipping?.trackingNumber,
+      platform:            r.platform ?? "tokopedia",
+      campaign_id:         r.campaign?.campaignId,
+      campaign_name:       r.campaign?.campaignName,
     };
   }
   // v1 flat — pass through
@@ -135,7 +163,8 @@ export async function POST(req: Request) {
   // Normalise v1 / v2 records into a uniform flat shape
   const records: FlatRecord[] = rawRecords.map(normaliseRecord);
 
-  console.log(`[Samples] Processing ${records.length} records for workspace ${ws.name} (v${rawRecords[0] && "sampleOrderId" in rawRecords[0] ? "2" : "1"})`);
+  const version = rawRecords[0] && "sampleOrderId" in rawRecords[0] ? "2" : "1";
+  console.log(`[Samples] Processing ${records.length} records for workspace ${ws.name} (v${version})`);
 
   const results = {
     total:               records.length,
@@ -180,7 +209,7 @@ export async function POST(req: Request) {
               namaAffiliator: record.creator_name    ?? "",
               noWhatsapp:     record.creator_phone   ?? "",
               alamat:         record.creator_address ?? "",
-              status:         "Pending",  // awaiting PIC confirmation
+              status:         "Pending",
               tahun:          String(new Date().getFullYear()),
             },
           });
@@ -191,7 +220,6 @@ export async function POST(req: Request) {
           results.affiliates_pending++;
         }
 
-        // Notify ADMIN+ about new affiliate from scraper
         if (isNewAffiliate) {
           void createNotification({
             workspaceId: ws.id,
@@ -206,21 +234,33 @@ export async function POST(req: Request) {
       // ── 3. Create ScrapedOrder ──────────────────────────────────────────────
       await prisma.scrapedOrder.create({
         data: {
-          workspaceId:      ws.id,
-          tiktokUsername:   username,
-          creatorName:      record.creator_name      ?? "",
-          creatorPhone:     record.creator_phone     ?? "",
-          creatorAddress:   record.creator_address   ?? "",
-          orderId:          record.order_id,
-          orderStatus:      record.order_status      ?? "",
-          orderDate:        record.order_date        ?? "",
-          productName:      record.product_name      ?? "",
-          productSku:       record.product_sku       ?? "",
-          productImageUrl:  record.product_image_url ?? "",
-          shippingProvider: record.shipping_provider ?? "",
-          trackingNumber:   record.tracking_number   ?? "",
-          platform:         record.platform          ?? "tokopedia",
-          status:           "pending_confirmation",
+          workspaceId:        ws.id,
+          // Creator
+          tiktokUsername:     username,
+          creatorName:        record.creator_name         ?? "",
+          creatorPhone:       record.creator_phone        ?? "",
+          creatorAddress:     record.creator_address      ?? "",
+          creatorId:          record.creator_id           ?? "",
+          creatorProfileLink: record.creator_profile_link ?? "",
+          // Order
+          orderId:            record.order_id,
+          orderStatus:        record.order_status         ?? "",
+          orderDate:          record.order_date           ?? "",
+          quantity:           record.quantity             ?? 1,
+          // Product
+          productName:        record.product_name         ?? "",
+          productSku:         record.product_sku          ?? "",
+          skuName:            record.sku_name             ?? "",
+          productImageUrl:    record.product_image_url    ?? "",
+          productLink:        record.product_link         ?? "",
+          // Shipping
+          shippingProvider:   record.shipping_provider    ?? "",
+          trackingNumber:     record.tracking_number      ?? "",
+          // Campaign / platform
+          platform:           record.platform             ?? "tokopedia",
+          campaignId:         record.campaign_id          ?? "",
+          campaignName:       record.campaign_name        ?? "",
+          status:             "pending_confirmation",
         },
       });
 

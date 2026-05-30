@@ -737,21 +737,36 @@ model WhatsappSession {
 model ScrapedOrder {
   id                  Int       @id @default(autoincrement())
   workspaceId         Int
+
+  // Creator / affiliate
   tiktokUsername      String    @default("")
   creatorName         String    @default("")
   creatorPhone        String    @default("")
   creatorAddress      String    @default("")
+  creatorId           String    @default("")   // Platform-native creator ID
+  creatorProfileLink  String    @default("")
 
   // Order data from scraper
   orderId             String    @unique
   orderStatus         String    @default("")
   orderDate           String    @default("")
+  quantity            Int       @default(1)
+
+  // Product
   productName         String    @default("")
-  productSku          String    @default("")
+  productSku          String    @default("")  // sku_id — unique product identifier
+  skuName             String    @default("")  // variant / sku display name
   productImageUrl     String    @default("")
+  productLink         String    @default("")  // direct link to product page
+
+  // Shipping
   shippingProvider    String    @default("")
   trackingNumber      String    @default("")
+
+  // Platform & campaign
   platform            String    @default("tokopedia") // tokopedia | tiktok
+  campaignId          String    @default("")
+  campaignName        String    @default("")
 
   // PIC review fields (filled after confirmation)
   kategoriPengiriman  String    @default("") // First Collaboration | Campaign Support | etc
