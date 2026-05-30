@@ -78,6 +78,18 @@ interface Delivery {
   // PIC system
   picId?: number | null;
   picName?: string;
+  // TikTok / ScrapedOrder data (null if no linked scraped order)
+  scrapedOrderId?:   number | null;
+  tiktokOrderId?:    string | null;
+  trackingNumber?:   string | null;
+  shippingProvider?: string | null;
+  shipmentStatus?:   string | null;
+  shippedAt?:        string | null;
+  deliveredAt?:      string | null;
+  estimatedDelivery?: string | null;
+  productSku?:       string | null;
+  productLink?:      string | null;
+  platform?:         string | null;
 }
 interface ReminderTemplate {
   id: number;
@@ -817,6 +829,84 @@ const DeliveryCard = memo(function DeliveryCard({ delivery, templates, cfg, onUp
                   </p>
                 )}
               </div>
+
+              {/* TikTok Order Data (shown when linked to a scraped order) */}
+              {delivery.tiktokOrderId && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                    TikTok Order Info
+                  </h4>
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Order ID</span>
+                      <span className="font-mono text-gray-700">{delivery.tiktokOrderId}</span>
+                    </div>
+                    {delivery.trackingNumber && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Resi</span>
+                        <span className="font-mono text-gray-700">
+                          {delivery.shippingProvider ? `${delivery.shippingProvider} · ` : ""}{delivery.trackingNumber}
+                        </span>
+                      </div>
+                    )}
+                    {delivery.shipmentStatus && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Status Kirim</span>
+                        <span className={`font-medium ${
+                          delivery.shipmentStatus === "DELIVERED"      ? "text-emerald-600" :
+                          delivery.shipmentStatus === "SEDANG_DIKIRIM" ? "text-blue-600" :
+                          delivery.shipmentStatus === "OVERDUE"        ? "text-red-600" :
+                          "text-amber-600"
+                        }`}>
+                          {{
+                            WAITING_SHIPMENT: "Menunggu Kirim",
+                            SEDANG_DIKIRIM:   "Sedang Dikirim",
+                            DELIVERED:        "Terkirim",
+                            OVERDUE:          "Overdue",
+                          }[delivery.shipmentStatus] ?? delivery.shipmentStatus}
+                        </span>
+                      </div>
+                    )}
+                    {delivery.shippedAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Dikirim</span>
+                        <span>{new Date(delivery.shippedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                      </div>
+                    )}
+                    {delivery.deliveredAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Tiba</span>
+                        <span>{new Date(delivery.deliveredAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                      </div>
+                    )}
+                    {delivery.estimatedDelivery && !delivery.deliveredAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Est. Tiba</span>
+                        <span>{new Date(delivery.estimatedDelivery).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                      </div>
+                    )}
+                    {delivery.productSku && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">SKU ID</span>
+                        <span className="font-mono text-gray-700">{delivery.productSku}</span>
+                      </div>
+                    )}
+                    {delivery.productLink && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Produk</span>
+                        <a
+                          href={delivery.productLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-indigo-500 hover:underline truncate max-w-[160px]"
+                        >
+                          Lihat di {delivery.platform === "tiktok" ? "TikTok" : "Tokopedia"} ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end pt-2">
                 <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-400 hover:text-red-600 hover:underline">Hapus</button>

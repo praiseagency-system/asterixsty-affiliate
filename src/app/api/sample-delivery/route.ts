@@ -70,13 +70,46 @@ export async function GET(req: Request) {
     }
   }
 
-  const parsed = items.map((d) => ({
-    ...d,
-    videoCeklisParsed: JSON.parse(d.videoCeklis || "[]") as { label: string; done: boolean }[],
-    noWhatsapp: affiliateMap[d.affiliateUsername.toLowerCase()]?.noWhatsapp ?? "",
-    pic: affiliateMap[d.affiliateUsername.toLowerCase()]?.pic ?? "",
-    videoSubmissions: includeSubs ? (subsByDelivery[d.id] ?? []) : undefined,
-  }));
+  // Enrich with ScrapedOrder tracking data for linked entries
+  const scrapedIds = items.map((d) => d.scrapedOrderId).filter((id): id is number => id != null);
+  const scrapedMap: Record<number, {
+    orderId: string; trackingNumber: string; shippingProvider: string;
+    shipmentStatus: string; shippedAt: string; deliveredAt: string; estimatedDelivery: string;
+    productSku: string; productLink: string; platform: string;
+  }> = {};
+  if (scrapedIds.length) {
+    const scraped = await prisma.scrapedOrder.findMany({
+      where: { id: { in: scrapedIds } },
+      select: {
+        id: true, orderId: true, trackingNumber: true, shippingProvider: true,
+        shipmentStatus: true, shippedAt: true, deliveredAt: true, estimatedDelivery: true,
+        productSku: true, productLink: true, platform: true,
+      },
+    });
+    for (const s of scraped) scrapedMap[s.id] = s;
+  }
+
+  const parsed = items.map((d) => {
+    const scraped = d.scrapedOrderId ? scrapedMap[d.scrapedOrderId] : null;
+    return {
+      ...d,
+      videoCeklisParsed: JSON.parse(d.videoCeklis || "[]") as { label: string; done: boolean }[],
+      noWhatsapp: affiliateMap[d.affiliateUsername.toLowerCase()]?.noWhatsapp ?? "",
+      pic: affiliateMap[d.affiliateUsername.toLowerCase()]?.pic ?? "",
+      videoSubmissions: includeSubs ? (subsByDelivery[d.id] ?? []) : undefined,
+      // TikTok / scraped data (null if no linked scraped order)
+      tiktokOrderId:      scraped?.orderId          ?? null,
+      trackingNumber:     scraped?.trackingNumber   ?? null,
+      shippingProvider:   scraped?.shippingProvider ?? null,
+      shipmentStatus:     scraped?.shipmentStatus   ?? null,
+      shippedAt:          scraped?.shippedAt        ?? null,
+      deliveredAt:        scraped?.deliveredAt      ?? null,
+      estimatedDelivery:  scraped?.estimatedDelivery ?? null,
+      productSku:         scraped?.productSku       ?? null,
+      productLink:        scraped?.productLink      ?? null,
+      platform:           scraped?.platform         ?? null,
+    };
+  });
 
   return NextResponse.json({ total, items: parsed, page, limit });
 }
