@@ -5,21 +5,30 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding master data...");
 
-  // ── License keys — always run (idempotent upsert) ─────────────────────────
-  // Maps workspace slug → { name (internal), brandName (display), licenseKey }
-  const LICENSE_MAP: Record<string, { name: string; brandName: string; licenseKey: string }> = {
-    "asterixsty": { name: "ws_asterixsty_001", brandName: "Asterixsty Perfumery", licenseKey: "PRAISE-ASTERIXSTY-001" },
-    "ameena":     { name: "ws_ameena_001",     brandName: "Ameena Hijab",          licenseKey: "PRAISE-AMEENA-001"     },
-    "dasfelix":   { name: "ws_dasfelix_001",   brandName: "Dasfelix Perfume",      licenseKey: "PRAISE-DASFELIX-001"   },
+  // ── License keys — idempotent, per-slug assignment ───────────────────────
+  // Only assigns keys to known workspaces. Safe to re-run on every deploy.
+  const LICENSE_MAP: Record<string, string> = {
+    "asterixsty": "PRAISE-ASTERIXSTY-001",
+    "ameena":     "PRAISE-AMEENA-001",
+    "dasfelix":   "PRAISE-DASFELIX-001",
   };
 
-  const allWorkspaces = await prisma.workspace.findMany();
-  for (const ws of allWorkspaces) {
-    const mapped = LICENSE_MAP[ws.slug] ?? null;
-    const key    = mapped?.licenseKey ?? (ws.licenseKey || `PRAISE-${ws.slug.toUpperCase()}-${ws.id.toString().padStart(3, "0")}`);
-    if (ws.licenseKey !== key) {
-      await prisma.workspace.update({ where: { id: ws.id }, data: { licenseKey: key } });
-      console.log(`✅ License key for "${ws.slug}": ${key}`);
+  for (const [slug, licenseKey] of Object.entries(LICENSE_MAP)) {
+    // Find first workspace matching this slug
+    const ws = await prisma.workspace.findFirst({ where: { slug } });
+    if (!ws) { console.log(`⚠️  Workspace "${slug}" not found, skip`); continue; }
+    if (ws.licenseKey === licenseKey) { console.log(`✓  "${slug}" already has correct key`); continue; }
+
+    try {
+      await prisma.workspace.update({ where: { id: ws.id }, data: { licenseKey } });
+      console.log(`✅ License "${slug}" → ${licenseKey}`);
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code;
+      if (code === "P2002") {
+        console.log(`ℹ️  Key ${licenseKey} already in use by another workspace, skip`);
+      } else {
+        throw e;
+      }
     }
   }
 
