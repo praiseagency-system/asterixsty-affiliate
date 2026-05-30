@@ -6,6 +6,7 @@
 import { NextResponse }          from "next/server";
 import { requireWorkspaceMember } from "@/lib/workspace-guard";
 import { prisma }                 from "@/lib/prisma";
+import { createUniqueLicenseKey } from "@/lib/license";
 
 export const dynamic = "force-dynamic";
 
@@ -54,10 +55,8 @@ export async function POST(req: Request) {
   const workspace = await prisma.workspace.findUnique({ where: { id: guard.workspaceId } });
   if (!workspace) return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
 
-  // Generate new key: PRAISE-{SLUG}-{TIMESTAMP_HEX}
-  const ts      = Date.now().toString(16).toUpperCase();
-  const slug    = workspace.slug.toUpperCase().replace(/-/g, "");
-  const newKey  = `PRAISE-${slug}-${ts}`;
+  // Generate collision-safe cryptographically random key
+  const newKey = await createUniqueLicenseKey(prisma);
 
   const updated = await prisma.workspace.update({
     where: { id: guard.workspaceId },

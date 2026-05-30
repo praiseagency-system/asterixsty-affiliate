@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { createUniqueLicenseKey } from "@/lib/license";
 
 export const dynamic = "force-dynamic";
 
@@ -58,11 +59,15 @@ export async function POST(req: Request) {
     });
   }
 
+  // Generate collision-safe license key before creating workspace
+  const licenseKey = await createUniqueLicenseKey(prisma);
+
   const workspace = await prisma.workspace.create({
     data: {
       agencyId: agency.id,
       name,
       slug,
+      licenseKey,
       logoUrl: body.logoUrl ?? "",
       theme:   body.theme   ?? "{}",
       members: {

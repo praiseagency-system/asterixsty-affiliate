@@ -1,31 +1,52 @@
 import { PrismaClient } from "../src/generated/prisma";
+import crypto          from "crypto";
 
 const prisma = new PrismaClient();
+
+/** Inline collision-safe generator (avoids cross-module path issues in seed) */
+async function seedLicenseKey(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const key      = "PRS-" + crypto.randomBytes(6).toString("hex").toUpperCase();
+    const existing = await prisma.workspace.findUnique({ where: { licenseKey: key }, select: { id: true } });
+    if (!existing) return key;
+  }
+  throw new Error("Failed to generate unique license key in seed");
+}
 
 async function main() {
   console.log("Seeding master data...");
 
-  // ── License keys — idempotent, per-slug assignment ───────────────────────
-  // Only assigns keys to known workspaces. Safe to re-run on every deploy.
-  const LICENSE_MAP: Record<string, string> = {
+  // ── License keys — assign to ALL workspaces missing a key ────────────────
+  // Known workspaces keep well-known keys (Chrome extension config compatibility).
+  // Any other workspace without a key gets a secure random PRS-XXXXXXXXXXXX key.
+  const KNOWN_KEYS: Record<string, string> = {
     "asterixsty": "PRAISE-ASTERIXSTY-001",
     "ameena":     "PRAISE-AMEENA-001",
     "dasfelix":   "PRAISE-DASFELIX-001",
   };
 
-  for (const [slug, licenseKey] of Object.entries(LICENSE_MAP)) {
-    // Find first workspace matching this slug
-    const ws = await prisma.workspace.findFirst({ where: { slug } });
-    if (!ws) { console.log(`⚠️  Workspace "${slug}" not found, skip`); continue; }
-    if (ws.licenseKey === licenseKey) { console.log(`✓  "${slug}" already has correct key`); continue; }
+  const allWorkspaces = await prisma.workspace.findMany({ select: { id: true, slug: true, licenseKey: true } });
+
+  for (const ws of allWorkspaces) {
+    const target = KNOWN_KEYS[ws.slug] ?? null;
+
+    // Case 1: known workspace already has correct key → skip
+    if (target && ws.licenseKey === target) {
+      console.log(`✓  "${ws.slug}" key OK`);
+      continue;
+    }
+
+    // Case 2: known workspace needs its specific key
+    // Case 3: unknown workspace has no key → generate one
+    const licenseKey = target ?? (ws.licenseKey ?? await seedLicenseKey());
+    if (ws.licenseKey === licenseKey) continue; // already set (case 3 already correct)
 
     try {
       await prisma.workspace.update({ where: { id: ws.id }, data: { licenseKey } });
-      console.log(`✅ License "${slug}" → ${licenseKey}`);
+      console.log(`✅ "${ws.slug}" → ${licenseKey}`);
     } catch (e: unknown) {
-      const code = (e as { code?: string }).code;
-      if (code === "P2002") {
-        console.log(`ℹ️  Key ${licenseKey} already in use by another workspace, skip`);
+      if ((e as { code?: string }).code === "P2002") {
+        console.log(`ℹ️  Key ${licenseKey} already used, skip "${ws.slug}"`);
       } else {
         throw e;
       }

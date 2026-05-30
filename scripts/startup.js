@@ -8,8 +8,9 @@
  *  4. next start     : launch the app
  */
 
-const { execSync }   = require('child_process')
-const { PrismaClient } = require('@prisma/client')
+const { execSync }     = require('child_process')
+// Prisma client is generated to src/generated/prisma (not @prisma/client)
+const { PrismaClient } = require('../src/generated/prisma')
 
 const run = (cmd) => {
   console.log(`\n[startup] > ${cmd}`)
