@@ -36,6 +36,18 @@ import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
+// ── CORS preflight (chrome-extension:// origin) ───────────────────────────────
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin":  "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Workspace-ID",
+    },
+  });
+}
+
 // ── Normalised flat record (internal representation) ─────────────────────────
 interface FlatRecord {
   order_id?:          string;

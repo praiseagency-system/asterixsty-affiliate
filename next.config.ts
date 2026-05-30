@@ -8,6 +8,22 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@whiskeysockets/baileys", "pino", "pino-pretty", "node-cron"],
 
+  // ── CORS headers for Chrome Extension + external API routes ─────────────────
+  // Requests come from chrome-extension:// origin (service worker / popup).
+  // Must include Access-Control-Allow-Origin: * and handle OPTIONS preflight.
+  async headers() {
+    const CORS = [
+      { key: "Access-Control-Allow-Origin",  value: "*" },
+      { key: "Access-Control-Allow-Methods", value: "GET, POST, PATCH, DELETE, OPTIONS" },
+      { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, X-Workspace-ID" },
+      { key: "Access-Control-Max-Age",       value: "86400" },
+    ];
+    return [
+      { source: "/api/extension/:path*", headers: CORS },
+      { source: "/api/v1/:path*",        headers: CORS },
+    ];
+  },
+
   // ── Domain redirects ────────────────────────────────────────────────────────
   // Belt-and-suspenders redirect alongside the middleware host check.
   // Handles the case where Next.js processes the request before middleware fires.

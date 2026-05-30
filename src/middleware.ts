@@ -10,8 +10,10 @@ const LEGACY_PATTERN = /\.railway\.app$/;
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth",
-  "/join/",          // public campaign join pages
-  "/submit-video/",  // affiliate video submission
+  "/api/extension/",   // Chrome Extension — auth via licenseKey Bearer token
+  "/api/v1/",          // External API (scraper/sync) — auth via licenseKey Bearer token
+  "/join/",            // public campaign join pages
+  "/submit-video/",    // affiliate video submission
   "/api/submit-video",
   "/favicon.ico",
   "/_next",
