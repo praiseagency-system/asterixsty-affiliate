@@ -407,6 +407,8 @@ model SampleDelivery {
   // PIC system
   picId               Int?    // FK to AffiliateSpecialist.id
   picName             String  @default("") // denormalized for fast read without join
+  // Link to origin ScrapedOrder (set when SampleDelivery is confirmed from scraper inbox)
+  scrapedOrderId      Int?    // FK to ScrapedOrder.id (nullable — manual entries have no scraped origin)
   deletedAt        DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -764,6 +766,13 @@ model ScrapedOrder {
   // Shipping
   shippingProvider    String    @default("")
   trackingNumber      String    @default("")
+
+  // Shipment tracking (populated by detail resolver or on update)
+  // shipmentStatus: WAITING_SHIPMENT | SEDANG_DIKIRIM | DELIVERED | OVERDUE | ""
+  shipmentStatus      String    @default("")
+  shippedAt           String    @default("")      // ISO datetime string from platform
+  deliveredAt         String    @default("")      // ISO datetime string from platform
+  estimatedDelivery   String    @default("")      // ISO datetime string from platform
 
   // Platform & campaign
   platform            String    @default("tokopedia") // tokopedia | tiktok

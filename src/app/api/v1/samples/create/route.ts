@@ -7,27 +7,30 @@
  *   v1 (flat, snake_case):
  *     { order_id, order_status, order_date, creator_username, creator_name, ... }
  *
- *   v2 (nested, camelCase — Extension v2.1):
+ *   v2 (nested, camelCase — Extension v2.1+):
  *     { sampleOrderId, orderStatus, createdAt, quantity,
  *       creator: { username, name, phone, address, creatorId, profileLink },
  *       product: { skuId, skuName, productName, productImage, productLink },
  *       shipping: { trackingNumber, shippingProvider },
+ *       shipment: { status, shippedAt, deliveredAt, estimatedDelivery },
  *       campaign: { campaignId, campaignName },
  *       platform }
  *
- * For each record:
- *   1. Skip duplicate orders (orderId already in DB)
- *   2. Auto-create DatabaseAffiliate (status = "Pending") if username is new
- *   3. Save ScrapedOrder with status = "pending_confirmation"
- *   4. Write ScrapeLog entry
+ * UPSERT behaviour per record:
+ *   NEW  (orderId not in DB) → CREATE ScrapedOrder + auto-create affiliate if new
+ *   DUP  (orderId exists)    → UPDATE tracking fields only (trackingNumber,
+ *                              shipmentStatus, orderStatus, shippedAt, deliveredAt,
+ *                              estimatedDelivery) when they carry new data
+ *   Both paths write a ScrapeLog entry.
  *
  * Request:
  *   Authorization: Bearer <license_key>
- *   X-Workspace-ID: <workspaceId>   (optional — used by extension v2 for routing)
+ *   X-Workspace-ID: <workspaceId>
  *   Body: { records: [...], scraped_at?: string, scrapedAt?: string }
  *
  * Response 200:
- *   { success, total, records_created, duplicates_skipped, affiliates_new, affiliates_pending, errors }
+ *   { success, total, records_created, records_updated, duplicates_skipped,
+ *     affiliates_new, affiliates_pending, errors }
  */
 
 import { NextResponse }       from "next/server";
@@ -51,30 +54,35 @@ export async function OPTIONS() {
 
 // ── Normalised flat record (internal representation) ─────────────────────────
 interface FlatRecord {
-  order_id?:           string;
-  order_status?:       string;
-  order_date?:         string;
-  quantity?:           number;
+  order_id?:             string;
+  order_status?:         string;
+  order_date?:           string;
+  quantity?:             number;
   // Creator
-  creator_username?:   string;
-  creator_name?:       string;
-  creator_phone?:      string;
-  creator_address?:    string;
-  creator_id?:         string;
+  creator_username?:     string;
+  creator_name?:         string;
+  creator_phone?:        string;
+  creator_address?:      string;
+  creator_id?:           string;
   creator_profile_link?: string;
   // Product
-  product_name?:       string;
-  product_sku?:        string;
-  sku_name?:           string;
-  product_image_url?:  string;
-  product_link?:       string;
+  product_name?:         string;
+  product_sku?:          string;
+  sku_name?:             string;
+  product_image_url?:    string;
+  product_link?:         string;
   // Shipping
-  shipping_provider?:  string;
-  tracking_number?:    string;
+  shipping_provider?:    string;
+  tracking_number?:      string;
+  // Shipment tracking (from detail endpoint or update)
+  shipment_status?:      string;   // raw platform status string
+  shipped_at?:           string;
+  delivered_at?:         string;
+  estimated_delivery?:   string;
   // Campaign / platform
-  platform?:           string;
-  campaign_id?:        string;
-  campaign_name?:      string;
+  platform?:             string;
+  campaign_id?:          string;
+  campaign_name?:        string;
 }
 
 // ── Extension v2 nested record shape ─────────────────────────────────────────
@@ -104,15 +112,39 @@ interface NestedRecord {
     trackingNumber?:   string;
     shippingProvider?: string;
   };
+  shipment?: {
+    status?:            string;   // raw TikTok shipment status
+    shippedAt?:         string;
+    deliveredAt?:       string;
+    estimatedDelivery?: string;
+  };
   campaign?: {
     campaignId?:   string;
     campaignName?: string;
   };
 }
 
+/** Map raw TikTok / Tokopedia shipment status → internal canonical value */
+function mapShipmentStatus(raw?: string): string {
+  if (!raw) return "";
+  const s = raw.toUpperCase().replace(/[\s_-]+/g, "_");
+
+  // TikTok Shop status strings (as observed from API)
+  if (/WAIT.*SHIP|WAITING_SHIPMENT|PENDING_SHIP|UNPACKED|AWAITING/.test(s)) return "WAITING_SHIPMENT";
+  if (/SHIP|IN_TRANSIT|TRANSIT|ON_THE_WAY|DIKIRIM|SEDANG|DELIVERY_IN_PROGRESS/.test(s)) return "SEDANG_DIKIRIM";
+  if (/DELIVERED|SELESAI|COMPLETED|RECEIVED|SUCCESS/.test(s)) return "DELIVERED";
+  if (/OVERDUE|LATE|TERLAMBAT|EXPIRED|CANCEL/.test(s)) return "OVERDUE";
+
+  // Tokopedia
+  if (/DIKIRIM|PENGIRIMAN/.test(s)) return "SEDANG_DIKIRIM";
+  if (/SELESAI|PESANAN_SELESAI/.test(s)) return "DELIVERED";
+  if (/PESANAN_BARU|MENUNGGU|SIAP_DIKIRIM/.test(s)) return "WAITING_SHIPMENT";
+
+  return ""; // unknown — store empty, don't guess
+}
+
 /** Normalise either v1 flat or v2 nested record into a FlatRecord */
 function normaliseRecord(raw: Record<string, unknown>): FlatRecord {
-  // Detect v2 by presence of camelCase / nested fields
   if ("sampleOrderId" in raw || "creator" in raw) {
     const r = raw as NestedRecord;
     return {
@@ -133,6 +165,10 @@ function normaliseRecord(raw: Record<string, unknown>): FlatRecord {
       product_link:        r.product?.productLink,
       shipping_provider:   r.shipping?.shippingProvider,
       tracking_number:     r.shipping?.trackingNumber,
+      shipment_status:     r.shipment?.status,
+      shipped_at:          r.shipment?.shippedAt,
+      delivered_at:        r.shipment?.deliveredAt,
+      estimated_delivery:  r.shipment?.estimatedDelivery,
       platform:            r.platform ?? "tokopedia",
       campaign_id:         r.campaign?.campaignId,
       campaign_name:       r.campaign?.campaignName,
@@ -160,16 +196,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "records array is required" }, { status: 400 });
   }
 
-  // Normalise v1 / v2 records into a uniform flat shape
   const records: FlatRecord[] = rawRecords.map(normaliseRecord);
 
   const version = rawRecords[0] && "sampleOrderId" in rawRecords[0] ? "2" : "1";
   console.log(`[Samples] Processing ${records.length} records — workspace: ${ws.name} (id:${ws.id}) v${version}`);
-  console.log(`[Samples] Dedup scope: workspaceId=${ws.id} (backend is source of truth)`);
 
   const results = {
     total:               records.length,
     records_created:     0,
+    records_updated:     0,
     duplicates_skipped:  0,
     affiliates_new:      0,
     affiliates_pending:  0,
@@ -183,16 +218,46 @@ export async function POST(req: Request) {
     }
 
     try {
-      // ── 1. Duplicate check — scoped to this workspace ──────────────────────
-      // Backend is the SOLE source of truth for dedup.
-      // The extension sends ALL records; we decide here what's new vs duplicate.
+      // ── 1. Workspace-scoped duplicate check ────────────────────────────────
       const existing = await prisma.scrapedOrder.findFirst({
         where:  { workspaceId: ws.id, orderId: record.order_id },
-        select: { id: true },
+        select: { id: true, trackingNumber: true, shipmentStatus: true },
       });
+
       if (existing) {
-        results.duplicates_skipped++;
-        console.log(`  [Samples] DUPLICATE: ${record.order_id}`);
+        // ── UPSERT: update tracking / shipment fields when we have new data ──
+        const incomingTracking  = record.tracking_number?.trim()    ?? "";
+        const incomingProvider  = record.shipping_provider?.trim()  ?? "";
+        const incomingStatus    = mapShipmentStatus(record.shipment_status);
+        const incomingShippedAt = record.shipped_at          ?? "";
+        const incomingDelivered = record.delivered_at        ?? "";
+        const incomingEstimate  = record.estimated_delivery  ?? "";
+        const incomingOrderStatus = record.order_status      ?? "";
+
+        // Only write if we're bringing new information
+        const hasNewTracking = incomingTracking  && !existing.trackingNumber;
+        const hasNewStatus   = incomingStatus    && incomingStatus !== existing.shipmentStatus;
+        const hasAnyUpdate   = hasNewTracking || hasNewStatus || incomingShippedAt || incomingDelivered || incomingEstimate;
+
+        if (hasAnyUpdate) {
+          await prisma.scrapedOrder.update({
+            where: { id: existing.id },
+            data: {
+              ...(incomingTracking   && { trackingNumber:    incomingTracking }),
+              ...(incomingProvider   && { shippingProvider:  incomingProvider }),
+              ...(incomingStatus     && { shipmentStatus:    incomingStatus }),
+              ...(incomingShippedAt  && { shippedAt:         incomingShippedAt }),
+              ...(incomingDelivered  && { deliveredAt:       incomingDelivered }),
+              ...(incomingEstimate   && { estimatedDelivery: incomingEstimate }),
+              ...(incomingOrderStatus && { orderStatus:      incomingOrderStatus }),
+            },
+          });
+          results.records_updated++;
+          console.log(`  [Samples] UPDATED: ${record.order_id}  status:${incomingStatus || '-'}  tracking:${incomingTracking || '-'}`);
+        } else {
+          results.duplicates_skipped++;
+          console.log(`  [Samples] DUPLICATE: ${record.order_id}`);
+        }
         continue;
       }
 
@@ -236,6 +301,8 @@ export async function POST(req: Request) {
       }
 
       // ── 3. Create ScrapedOrder ──────────────────────────────────────────────
+      const internalShipmentStatus = mapShipmentStatus(record.shipment_status);
+
       await prisma.scrapedOrder.create({
         data: {
           workspaceId:        ws.id,
@@ -260,6 +327,11 @@ export async function POST(req: Request) {
           // Shipping
           shippingProvider:   record.shipping_provider    ?? "",
           trackingNumber:     record.tracking_number      ?? "",
+          // Shipment tracking
+          shipmentStatus:     internalShipmentStatus,
+          shippedAt:          record.shipped_at           ?? "",
+          deliveredAt:        record.delivered_at         ?? "",
+          estimatedDelivery:  record.estimated_delivery   ?? "",
           // Campaign / platform
           platform:           record.platform             ?? "tokopedia",
           campaignId:         record.campaign_id          ?? "",
@@ -269,7 +341,7 @@ export async function POST(req: Request) {
       });
 
       results.records_created++;
-      console.log(`  [Samples] CREATED: ${record.order_id}  @${username || '-'}  platform:${record.platform ?? '?'}`);
+      console.log(`  [Samples] CREATED: ${record.order_id}  @${username || '-'}  platform:${record.platform ?? '?'}${internalShipmentStatus ? `  shipment:${internalShipmentStatus}` : ''}`);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -285,17 +357,23 @@ export async function POST(req: Request) {
       platform:     records[0]?.platform ?? "tokopedia",
       totalRecords: results.total,
       newRecords:   results.records_created,
-      duplicates:   results.duplicates_skipped,
+      duplicates:   results.duplicates_skipped + results.records_updated,
       status:       "success",
     },
   }).catch((err) => console.error("[Samples] ScrapeLog error:", err));
 
-  console.log("[Samples] Done:", results);
+  console.log("[Samples] Done:", {
+    created:    results.records_created,
+    updated:    results.records_updated,
+    duplicates: results.duplicates_skipped,
+    errors:     results.errors.length,
+  });
 
   return NextResponse.json({
     success:             true,
     total:               results.total,
     records_created:     results.records_created,
+    records_updated:     results.records_updated,
     duplicates_skipped:  results.duplicates_skipped,
     affiliates_new:      results.affiliates_new,
     affiliates_pending:  results.affiliates_pending,
